@@ -258,3 +258,20 @@ input,textarea,button,select{font-family:inherit;font-size:inherit}
   .settings-grid{grid-template-columns:1fr}
   .search-card{padding:18px}
 }
+
+/* ═══════════════════ MANUAL ADD FORM ═══════════════════ */
+.add-recipient-form{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px}
+.form-section-title{font-size:.78rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.form-section-title svg{width:14px;height:14px;color:var(--accent)}
+.add-recipient-form .input-group{margin-bottom:8px}
+.add-recipient-form .input-group input{padding:9px 12px;font-size:.82rem}
+.btn-full{width:100%;justify-content:center}
+.recipient-status{font-size:.7rem;font-weight:600;white-space:nowrap;padding:2px 7px;border-radius:20px;flex-shrink:0}
+.recipient-status.sending{color:var(--orange);background:rgba(245,158,11,.1)}
+.recipient-status.ok{color:var(--green);background:rgba(16,185,129,.1)}
+.recipient-status.err{color:var(--red);background:rgba(239,68,68,.1)}
+.template-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.placeholder-guide{font-size:.72rem;color:var(--text-dim);margin-bottom:14px;line-height:2}
+.badge-placeholder{display:inline-block;padding:1px 8px;background:rgba(99,102,241,.15);color:var(--primary);border:1px solid rgba(99,102,241,.25);border-radius:4px;font-family:var(--mono);font-size:.72rem;font-weight:600}
+.template-textarea{width:100%;min-height:260px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.88rem;line-height:1.8;resize:vertical;outline:none;font-family:var(--font)}
+.template-textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}

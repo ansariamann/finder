@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>JobReach — Fresher Job Finder & Outreach</title>
   <meta name="description" content="Find fresher job openings in any city and send bulk outreach emails with your resume attached." />
 
@@ -15,6 +19,7 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/mobile.css" />
 </head>
 <body>
   <!-- ═══════════════════ BACKGROUND EFFECTS ═══════════════════ -->
@@ -149,7 +154,8 @@
     <!-- ──── TAB: OUTREACH ──── -->
     <section class="tab-panel" id="panel-outreach">
       <div class="outreach-layout">
-        <!-- Left: Recipients List -->
+
+        <!-- Left: Recipients -->
         <div class="glass-card outreach-recipients">
           <div class="card-header">
             <div class="card-icon-wrap accent">
@@ -157,15 +163,32 @@
             </div>
             <div>
               <h2>Recipients</h2>
-              <p class="card-subtitle" id="recipient-count">0 contacts added</p>
+              <p class="card-subtitle" id="recipient-count">0 contacts</p>
             </div>
+          </div>
+
+          <!-- Manual Add Form -->
+          <div class="add-recipient-form">
+            <h4 class="form-section-title"><i data-lucide="user-plus"></i> Add Recipient Manually</h4>
+            <div class="input-group">
+              <input type="text" id="add-name" placeholder="HR Name (optional)" />
+            </div>
+            <div class="input-group">
+              <input type="email" id="add-email" placeholder="Email address *" required />
+            </div>
+            <div class="input-group">
+              <input type="text" id="add-company" placeholder="Company name *" required />
+            </div>
+            <button class="btn btn-accent btn-sm btn-full" id="add-recipient-btn">
+              <i data-lucide="plus"></i> Add to List
+            </button>
           </div>
 
           <!-- Resume Upload -->
           <div class="resume-upload-zone" id="resume-zone">
             <div class="upload-area" id="upload-area">
               <i data-lucide="file-up"></i>
-              <p>Drop your resume here</p>
+              <p>Attach your resume</p>
               <span>PDF, DOC, DOCX — Max 10MB</span>
               <input type="file" id="resume-input" accept=".pdf,.doc,.docx" hidden />
               <button class="btn btn-outline btn-sm" id="browse-btn">Browse Files</button>
@@ -187,7 +210,7 @@
             <div class="empty-recipients">
               <i data-lucide="inbox"></i>
               <p>No contacts yet</p>
-              <span>Search for jobs and add companies here</span>
+              <span>Add manually above or from job search results</span>
             </div>
           </div>
 
@@ -197,7 +220,7 @@
               <i data-lucide="trash-2"></i> Clear All
             </button>
             <button class="btn btn-primary" id="send-all-btn">
-              <i data-lucide="send"></i> Send to All (<span id="send-count">0</span>)
+              <i data-lucide="send"></i> Send Individually (<span id="send-count">0</span>)
             </button>
           </div>
         </div>
@@ -206,45 +229,48 @@
         <div class="glass-card outreach-template">
           <div class="card-header">
             <div class="card-icon-wrap purple">
-              <i data-lucide="palette"></i>
+              <i data-lucide="mail"></i>
             </div>
             <div>
               <h2>Email Template</h2>
-              <p class="card-subtitle">Customize your outreach message</p>
+              <p class="card-subtitle">Edit your message — use placeholders below</p>
             </div>
           </div>
 
           <div class="template-form">
+            <!-- Sender Info -->
+            <div class="template-row-2">
+              <div class="input-group">
+                <label for="sender-name-input">Your Name</label>
+                <input type="text" id="sender-name-input" placeholder="Your full name" />
+              </div>
+              <div class="input-group">
+                <label for="sender-phone-input">Your Phone</label>
+                <input type="text" id="sender-phone-input" placeholder="+91-XXXXXXXXXX" />
+              </div>
+            </div>
+
+            <!-- Subject -->
             <div class="input-group">
               <label for="email-subject">Subject Line</label>
               <input type="text" id="email-subject"
-                value="Application for {position} – Enthusiastic Fresher | {name}"
+                value="Application for Software Developer Position – {name}"
                 placeholder="Email subject..." />
-              <small class="input-hint">Use {company}, {position}, {name} as placeholders</small>
             </div>
 
+            <!-- Placeholder guide -->
+            <div class="placeholder-guide">
+              <span class="badge-placeholder">{company}</span> company name &nbsp;
+              <span class="badge-placeholder">{name}</span> your name &nbsp;
+              <span class="badge-placeholder">{phone}</span> your phone &nbsp;
+              <span class="badge-placeholder">{email}</span> your email &nbsp;
+              <span class="badge-placeholder">{hr_name}</span> recipient name
+            </div>
+
+            <!-- Simple editable body -->
             <div class="input-group">
-              <label for="sender-name-input">Your Name</label>
-              <input type="text" id="sender-name-input" placeholder="Enter your full name" />
-            </div>
-
-            <div class="input-group">
-              <label for="sender-phone-input">Your Phone</label>
-              <input type="text" id="sender-phone-input" placeholder="+91-XXXXXXXXXX" />
-            </div>
-
-            <div class="template-tabs">
-              <button class="template-tab active" data-view="visual" id="tab-visual">
-                <i data-lucide="eye"></i> Preview
-              </button>
-              <button class="template-tab" data-view="code" id="tab-code">
-                <i data-lucide="code-2"></i> HTML
-              </button>
-            </div>
-
-            <div class="template-preview-wrap">
-              <div class="template-preview" id="template-preview"></div>
-              <textarea class="template-code" id="template-code" style="display: none;"></textarea>
+              <label for="template-body">Email Body <small>(plain text, editable)</small></label>
+              <textarea id="template-body" class="template-textarea" rows="14" placeholder="Write your email here..."></textarea>
             </div>
 
             <div class="template-actions">
@@ -252,7 +278,7 @@
                 <i data-lucide="rotate-ccw"></i> Reset Default
               </button>
               <button class="btn btn-outline" id="preview-email-btn">
-                <i data-lucide="eye"></i> Full Preview
+                <i data-lucide="eye"></i> Preview
               </button>
             </div>
           </div>
@@ -281,6 +307,8 @@
         <div class="progress-log" id="progress-log"></div>
       </div>
     </section>
+
+
 
     <!-- ──── TAB: SETTINGS ──── -->
     <section class="tab-panel" id="panel-settings">
@@ -391,6 +419,22 @@
       <div class="modal-body" id="modal-body"></div>
     </div>
   </div>
+
+  <!-- Bottom Navigation Bar (mobile) -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="bottom-nav-btn active" data-tab="search" id="bnav-search">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      Search
+    </button>
+    <button class="bottom-nav-btn" data-tab="outreach" id="bnav-outreach">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+      Outreach
+    </button>
+    <button class="bottom-nav-btn" data-tab="settings" id="bnav-settings">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      Settings
+    </button>
+  </nav>
 
   <script src="js/email-template.js"></script>
   <script src="js/app.js"></script>

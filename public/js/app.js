@@ -1,10 +1,10 @@
 /**
- * JobReach — Main Application Logic
+ * JobReach â€” Main Application Logic
  */
 (function () {
   'use strict';
 
-  // ─── State ───────────────────────────────────────────────
+  // â”€â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const state = {
     jobs: [],
     selectedJobs: new Set(),
@@ -17,7 +17,7 @@
     resumeName: ''
   };
 
-  // ─── DOM Cache ───────────────────────────────────────────
+  // â”€â”€â”€ DOM Cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
 
@@ -55,12 +55,14 @@
     emailSubject: $('#email-subject'),
     senderNameInput: $('#sender-name-input'),
     senderPhoneInput: $('#sender-phone-input'),
-    tabVisual: $('#tab-visual'),
-    tabCode: $('#tab-code'),
-    templatePreview: $('#template-preview'),
-    templateCode: $('#template-code'),
+    templateBody: $('#template-body'),
     resetTemplateBtn: $('#reset-template-btn'),
     previewEmailBtn: $('#preview-email-btn'),
+    // manual add
+    addName: $('#add-name'),
+    addEmail: $('#add-email'),
+    addCompany: $('#add-company'),
+    addRecipientBtn: $('#add-recipient-btn'),
     sendingProgress: $('#sending-progress'),
     progressBar: $('#progress-bar'),
     progressSubtitle: $('#progress-subtitle'),
@@ -82,7 +84,7 @@
     modalClose: $('#modal-close')
   };
 
-  // ─── Init ────────────────────────────────────────────────
+  // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function init() {
     lucide.createIcons();
     setupNavTabs();
@@ -97,21 +99,32 @@
     checkResumeStatus();
   }
 
-  // ─── Navigation Tabs ────────────────────────────────────
+  // â”€â”€â”€ Navigation Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupNavTabs() {
-    $$('.nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        $$('.nav-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        $$('.tab-panel').forEach(p => p.classList.remove('active'));
-        $(`#panel-${tab}`).classList.add('active');
-        lucide.createIcons();
-      });
-    });
+    function switchTab(tab) {
+      // top nav
+      $$('.nav-btn').forEach(b => b.classList.remove('active'));
+      const topBtn = $(`[data-tab="${tab}"].nav-btn`);
+      if (topBtn) topBtn.classList.add('active');
+      // bottom nav
+      $$('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
+      const botBtn = $(`[data-tab="${tab}"].bottom-nav-btn`);
+      if (botBtn) botBtn.classList.add('active');
+      // panels
+      $$('.tab-panel').forEach(p => p.classList.remove('active'));
+      $(`#panel-${tab}`).classList.add('active');
+      lucide.createIcons();
+    }
+
+    $$('.nav-btn').forEach(btn =>
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+    );
+    $$('.bottom-nav-btn').forEach(btn =>
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+    );
   }
 
-  // ─── Search ──────────────────────────────────────────────
+  // â”€â”€â”€ Search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupSearch() {
     dom.searchForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -159,8 +172,10 @@
         dom.resultsSection.style.display = 'block';
         dom.emptyState.style.display = 'none';
         dom.loadMoreWrap.style.display = 'block';
-        dom.resultsTitle.textContent = `Jobs in ${state.currentCity} — ${state.jobs.length} found`;
-        toast('success', `Found ${data.jobs.length} new companies!`);
+        const totalAvail = data.totalAvailable || data.total;
+        dom.resultsTitle.textContent = `Jobs in ${state.currentCity} â€” ${state.jobs.length} shown of ${totalAvail} found`;
+        dom.loadMoreBtn.textContent = `Load More (${totalAvail - state.jobs.length} remaining)`;
+        toast('success', `Found ${data.jobs.length} new job listings!`);
       } else {
         if (!append) {
           dom.emptyState.style.display = 'block';
@@ -185,7 +200,7 @@
 
       const emailHtml = job.email
         ? `<div class="job-email"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>${job.email}</div>`
-        : `<p class="job-no-email">No email found — click to find</p>`;
+        : `<p class="job-no-email">No email found â€” click to find</p>`;
 
       const posted = timeAgo(job.posted);
 
@@ -210,7 +225,7 @@
     dom.jobsGrid.appendChild(fragment);
   }
 
-  // ─── Job Selection ───────────────────────────────────────
+  // â”€â”€â”€ Job Selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupJobSelection() {
     dom.selectAllBtn.addEventListener('click', () => {
       const allSelected = state.selectedJobs.size === state.jobs.length;
@@ -276,8 +291,39 @@
     dom.statsRow.style.display = state.jobs.length > 0 ? 'flex' : 'none';
   }
 
-  // ─── Outreach / Recipients ──────────────────────────────
+  // â”€â”€â”€ Outreach / Recipients â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupOutreach() {
+    // Manual add
+    dom.addRecipientBtn.addEventListener('click', () => {
+      const email   = dom.addEmail.value.trim();
+      const company = dom.addCompany.value.trim();
+      const name    = dom.addName.value.trim();
+
+      if (!email || !company) {
+        toast('error', 'Email and company name are required.');
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        toast('error', 'Please enter a valid email address.');
+        return;
+      }
+      if (state.recipients.find(r => r.email === email)) {
+        toast('info', 'This email is already in the list.');
+        return;
+      }
+      state.recipients.push({ email, company, name: name || 'HR Team', position: 'Software Developer' });
+      dom.addEmail.value   = '';
+      dom.addCompany.value = '';
+      dom.addName.value    = '';
+      renderRecipients();
+      toast('success', `Added ${company} to outreach list.`);
+    });
+
+    // Allow pressing Enter in email field to add
+    dom.addEmail.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); dom.addRecipientBtn.click(); }
+    });
+
     dom.clearRecipientsBtn.addEventListener('click', () => {
       state.recipients = [];
       renderRecipients();
@@ -293,15 +339,15 @@
         <div class="empty-recipients">
           <i data-lucide="inbox"></i>
           <p>No contacts yet</p>
-          <span>Search for jobs and add companies here</span>
+          <span>Add manually above or from job search results</span>
         </div>`;
       dom.bulkActions.style.display = 'none';
-      dom.recipientCount.textContent = '0 contacts added';
+      dom.recipientCount.textContent = '0 contacts';
       lucide.createIcons();
       return;
     }
 
-    dom.recipientCount.textContent = `${state.recipients.length} contacts added`;
+    dom.recipientCount.textContent = `${state.recipients.length} contact${state.recipients.length > 1 ? 's' : ''}`;
     dom.sendCount.textContent = state.recipients.length;
     dom.bulkActions.style.display = 'flex';
 
@@ -309,12 +355,13 @@
     state.recipients.forEach((r, i) => {
       const initials = r.company.substring(0, 2).toUpperCase();
       html += `
-        <div class="recipient-item" data-index="${i}">
+        <div class="recipient-item" data-index="${i}" id="recipient-row-${i}">
           <div class="recipient-avatar">${initials}</div>
           <div class="recipient-info">
             <strong>${esc(r.company)}</strong>
             <small>${esc(r.email)}</small>
           </div>
+          <span class="recipient-status" id="rstat-${i}"></span>
           <button class="btn-icon recipient-remove" data-index="${i}" title="Remove">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
@@ -331,7 +378,7 @@
     });
   }
 
-  // ─── Resume Upload ───────────────────────────────────────
+  // â”€â”€â”€ Resume Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupResumeUpload() {
     dom.browseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -371,12 +418,10 @@
   async function uploadResume(file) {
     const fd = new FormData();
     fd.append('resume', file);
-
     try {
       const res = await fetch('/api/upload-resume', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-
       state.resumeUploaded = true;
       state.resumeName = data.filename;
       dom.resumeNameEl.textContent = data.filename;
@@ -404,127 +449,135 @@
     } catch (e) { /* silent */ }
   }
 
-  // ─── Email Template ──────────────────────────────────────
+  // â”€â”€â”€ Email Template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const DEFAULT_TEMPLATE =
+`Dear {hr_name},
+
+I hope this message finds you well. I came across {company} and was genuinely impressed by your work. I am a recent Computer Science graduate eager to start my career in software development.
+
+I am writing to express my interest in any fresher or entry-level software developer positions at {company}. I have strong fundamentals in programming, data structures, and web development, and I am a quick learner who is enthusiastic and committed.
+
+I have attached my resume for your consideration. I would love the opportunity to discuss how I can contribute to your team.
+
+Thank you for your time. I look forward to hearing from you.
+
+Warm regards,
+{name}
+{email}
+{phone}`;
+
   function setupEmailTemplate() {
-    state.emailTemplate = window.DEFAULT_EMAIL_TEMPLATE || '';
-    dom.templateCode.value = state.emailTemplate;
-    renderTemplatePreview();
-
-    dom.tabVisual.addEventListener('click', () => {
-      dom.tabVisual.classList.add('active');
-      dom.tabCode.classList.remove('active');
-      dom.templatePreview.style.display = '';
-      dom.templateCode.style.display = 'none';
-      state.emailTemplate = dom.templateCode.value;
-      renderTemplatePreview();
-    });
-
-    dom.tabCode.addEventListener('click', () => {
-      dom.tabCode.classList.add('active');
-      dom.tabVisual.classList.remove('active');
-      dom.templateCode.style.display = '';
-      dom.templatePreview.style.display = 'none';
-    });
-
-    dom.templateCode.addEventListener('input', () => {
-      state.emailTemplate = dom.templateCode.value;
-    });
+    dom.templateBody.value = DEFAULT_TEMPLATE;
 
     dom.resetTemplateBtn.addEventListener('click', () => {
-      state.emailTemplate = window.DEFAULT_EMAIL_TEMPLATE || '';
-      dom.templateCode.value = state.emailTemplate;
-      renderTemplatePreview();
+      dom.templateBody.value = DEFAULT_TEMPLATE;
       toast('info', 'Template reset to default.');
     });
 
     dom.previewEmailBtn.addEventListener('click', () => {
-      const html = fillTemplate(state.emailTemplate);
-      dom.modalBody.innerHTML = html;
+      const filled = fillTemplate(dom.templateBody.value);
+      // Convert plain text to HTML for preview
+      dom.modalBody.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.7;">${esc(filled)}</pre>`;
       dom.modalOverlay.style.display = 'flex';
     });
   }
 
-  function renderTemplatePreview() {
-    dom.templatePreview.innerHTML = fillTemplate(state.emailTemplate);
+  function fillTemplate(text, recipient) {
+    const r = recipient || {};
+    return text
+      .replace(/{company}/g,  r.company  || 'Your Company')
+      .replace(/{hr_name}/g,  r.name     || 'Hiring Manager')
+      .replace(/{position}/g, r.position || 'Software Developer')
+      .replace(/{name}/g,     dom.senderNameInput.value  || 'Your Name')
+      .replace(/{phone}/g,    dom.senderPhoneInput.value || '+91-XXXXXXXXXX')
+      .replace(/{email}/g,    'your-email@gmail.com');
   }
 
-  function fillTemplate(html) {
-    return html
-      .replace(/{company}/g, 'Acme Corp')
-      .replace(/{position}/g, 'Software Engineer - Fresher')
-      .replace(/{name}/g, dom.senderNameInput.value || 'Your Name')
-      .replace(/{phone}/g, dom.senderPhoneInput.value || '+91-XXXXXXXXXX')
-      .replace(/{email}/g, 'your-email@gmail.com');
-  }
-
-  // ─── Bulk Email Sending ──────────────────────────────────
+  // â”€â”€â”€ Bulk Email Sending â€” one email per recipient â”€â”€â”€â”€â”€â”€â”€â”€
   async function sendBulkEmails() {
     if (state.recipients.length === 0) {
       toast('error', 'No recipients to send to.');
       return;
     }
-
     if (!dom.senderNameInput.value.trim()) {
-      toast('error', 'Please enter your name in the Outreach tab.');
+      toast('error', 'Please enter your name in the template section.');
       return;
     }
-
     const subject = dom.emailSubject.value.trim();
     if (!subject) {
       toast('error', 'Please enter an email subject.');
       return;
     }
 
-    // Show progress
+    const total = state.recipients.length;
+    let sent = 0, failed = 0;
+
     dom.sendingProgress.style.display = 'block';
     dom.progressBar.style.width = '0%';
-    dom.progSent.textContent = '0';
+    dom.progSent.textContent   = '0';
     dom.progFailed.textContent = '0';
-    dom.progTotal.textContent = state.recipients.length;
-    dom.progressLog.innerHTML = '';
-    dom.progressSubtitle.textContent = 'Sending emails...';
+    dom.progTotal.textContent  = total;
+    dom.progressLog.innerHTML  = '';
+    dom.progressSubtitle.textContent = `Sending 1 of ${total}...`;
     dom.sendAllBtn.disabled = true;
 
-    try {
-      const res = await fetch('/api/send-emails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipients: state.recipients,
-          subject: subject,
-          htmlBody: dom.templateCode.value || state.emailTemplate,
-          senderName: dom.senderNameInput.value.trim(),
-          senderPhone: dom.senderPhoneInput.value.trim()
-        })
-      });
+    for (let i = 0; i < state.recipients.length; i++) {
+      const r = state.recipients[i];
+      const rstatEl = document.getElementById(`rstat-${i}`);
 
-      const data = await res.json();
+      // Mark sending
+      if (rstatEl) { rstatEl.textContent = 'â³'; rstatEl.className = 'recipient-status sending'; }
+      dom.progressSubtitle.textContent = `Sending ${i + 1} of ${total}: ${r.company}...`;
 
-      if (!res.ok) throw new Error(data.error);
+      // Build individual plain-text body, convert newlines to <br> for email
+      const plainBody = fillTemplate(dom.templateBody.value, r);
+      const htmlBody  = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#222;max-width:600px;">${plainBody.replace(/\n/g, '<br>')}</div>`;
+      const subjectFilled = subject
+        .replace(/{company}/g,  r.company  || 'Your Company')
+        .replace(/{name}/g,     dom.senderNameInput.value || 'Applicant')
+        .replace(/{hr_name}/g,  r.name     || 'Hiring Manager');
 
-      dom.progressBar.style.width = '100%';
-      dom.progSent.textContent = data.sent;
-      dom.progFailed.textContent = data.failed;
-      dom.progressSubtitle.textContent = `Done! ${data.sent} sent, ${data.failed} failed.`;
-
-      if (data.results) {
-        data.results.forEach(r => {
-          const cls = r.status === 'sent' ? 'success' : 'error';
-          const icon = r.status === 'sent' ? '✓' : '✗';
-          dom.progressLog.innerHTML += `<div class="log-entry ${cls}">${icon} ${esc(r.company)} — ${esc(r.email)} — ${r.status}${r.error ? ': ' + esc(r.error) : ''}</div>`;
+      try {
+        const res = await fetch('/api/send-emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipients: [r],          // ONE recipient at a time
+            subject: subjectFilled,
+            htmlBody,
+            senderName:  dom.senderNameInput.value.trim(),
+            senderPhone: dom.senderPhoneInput.value.trim()
+          })
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        const result = data.results && data.results[0];
+        if (result && result.status === 'sent') {
+          sent++;
+          if (rstatEl) { rstatEl.textContent = 'âœ“ Sent'; rstatEl.className = 'recipient-status ok'; }
+          dom.progressLog.innerHTML += `<div class="log-entry success">âœ“ ${esc(r.company)} â€” ${esc(r.email)}</div>`;
+        } else {
+          throw new Error(result ? result.error : 'Unknown error');
+        }
+      } catch (err) {
+        failed++;
+        if (rstatEl) { rstatEl.textContent = 'âœ— Failed'; rstatEl.className = 'recipient-status err'; }
+        dom.progressLog.innerHTML += `<div class="log-entry error">âœ— ${esc(r.company)} â€” ${esc(r.email)}: ${esc(err.message)}</div>`;
       }
 
-      toast('success', `Emails sent: ${data.sent}/${data.total}`);
-    } catch (err) {
-      dom.progressSubtitle.textContent = 'Error: ' + err.message;
-      toast('error', err.message);
-    } finally {
-      dom.sendAllBtn.disabled = false;
+      dom.progSent.textContent   = sent;
+      dom.progFailed.textContent = failed;
+      dom.progressBar.style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+      dom.progressLog.scrollTop   = dom.progressLog.scrollHeight;
     }
+
+    dom.progressSubtitle.textContent = `Done! ${sent} sent, ${failed} failed.`;
+    dom.sendAllBtn.disabled = false;
+    toast(failed === 0 ? 'success' : 'info', `Emails sent: ${sent}/${total}`);
   }
 
-  // ─── Settings ────────────────────────────────────────────
+  // â”€â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupSettings() {
     dom.testSmtpBtn.addEventListener('click', async () => {
       dom.testSmtpBtn.disabled = true;
@@ -572,11 +625,11 @@
     dom.smtpStatusIcon.innerHTML = online
       ? '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
       : '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>';
-    dom.smtpStatusText.textContent = online ? 'Connected & Ready' : 'Not Configured';
+    dom.smtpStatusText.textContent  = online ? 'Connected & Ready' : 'Not Configured';
     dom.smtpStatusEmail.textContent = email || 'Update .env to configure';
   }
 
-  // ─── Modal ───────────────────────────────────────────────
+  // â”€â”€â”€ Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupModal() {
     dom.modalClose.addEventListener('click', () => { dom.modalOverlay.style.display = 'none'; });
     dom.modalOverlay.addEventListener('click', (e) => {
@@ -584,7 +637,7 @@
     });
   }
 
-  // ─── Utilities ───────────────────────────────────────────
+  // â”€â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function showLoading(show) {
     dom.loadingState.style.display = show ? 'block' : 'none';
     if (show) {
@@ -598,15 +651,13 @@
   function toast(type, message) {
     const icons = {
       success: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
-      error: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
-      info: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+      error:   '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
+      info:    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
     };
-
     const el = document.createElement('div');
     el.className = `toast ${type}`;
     el.innerHTML = `${icons[type] || ''}<span>${message}</span>`;
     dom.toastContainer.appendChild(el);
-
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
   }
 
@@ -626,6 +677,6 @@
     return days + 'd ago';
   }
 
-  // ─── Boot ────────────────────────────────────────────────
+  // â”€â”€â”€ Boot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   document.addEventListener('DOMContentLoaded', init);
 })();
