@@ -278,6 +278,7 @@ app.get('/api/resume-status', (req, res) => {
 app.post('/api/send-emails', async (req, res) => {
   try {
     const { recipients, subject, htmlBody, senderName, senderPhone } = req.body;
+    console.log(`\n📨 Attempting to send ${recipients?.length || 0} emails...`);
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
       return res.status(400).json({ error: 'No recipients provided' });
@@ -288,6 +289,7 @@ app.post('/api/send-emails', async (req, res) => {
     }
 
     if (!process.env.SMTP_USER || process.env.SMTP_USER === 'your-email@gmail.com') {
+      console.log('❌ Error: SMTP_USER is not configured in environment variables.');
       return res.status(400).json({
         error: 'SMTP not configured. Please update .env file with your email credentials.'
       });
@@ -298,7 +300,9 @@ app.post('/api/send-emails', async (req, res) => {
     // Verify SMTP connection
     try {
       await transporter.verify();
+      console.log('✅ SMTP connection verified successfully.');
     } catch (verifyErr) {
+      console.log('❌ SMTP Verification Failed:', verifyErr.message);
       return res.status(400).json({
         error: 'SMTP connection failed. Check your email credentials in .env',
         details: verifyErr.message
@@ -392,7 +396,9 @@ app.post('/api/send-emails', async (req, res) => {
  */
 app.post('/api/test-smtp', async (req, res) => {
   try {
+    console.log('\n🔌 Testing SMTP connection...');
     if (!process.env.SMTP_USER || process.env.SMTP_USER === 'your-email@gmail.com') {
+      console.log('❌ Error: SMTP not configured.');
       return res.status(400).json({
         error: 'SMTP not configured. Update your .env file.'
       });
@@ -401,6 +407,7 @@ app.post('/api/test-smtp', async (req, res) => {
     const transporter = createTransporter();
     await transporter.verify();
 
+    console.log('✅ SMTP test successful!');
     res.json({ success: true, message: 'SMTP connection successful!' });
 
   } catch (error) {
