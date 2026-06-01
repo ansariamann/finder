@@ -428,6 +428,168 @@ app.get('/api/email-log', (req, res) => {
 });
 
 /**
+ * GET /api/sender-info
+ * Return sender name and phone from environment variables
+ */
+app.get('/api/sender-info', (req, res) => {
+  res.json({
+    name:  process.env.SENDER_NAME  || '',
+    phone: process.env.SENDER_PHONE || '',
+    email: process.env.SMTP_USER    || ''
+  });
+});
+
+/**
+ * POST /api/quick-send
+ * Accept only a company email. Derive company name from domain,
+ * build the HTML body, and fire the email — fully automatic.
+ * Body: { companyEmail: string }
+ */
+app.post('/api/quick-send', async (req, res) => {
+  try {
+    const { companyEmail, position: requestedPosition } = req.body;
+    if (!companyEmail || !companyEmail.includes('@')) {
+      return res.status(400).json({ error: 'A valid company email is required.' });
+    }
+
+    // Derive company name from domain
+    const domain = companyEmail.split('@')[1] || '';
+    const skipParts = new Set(['com','co','in','org','net','io','ai','app','dev','tech','gov','edu','uk','us','au']);
+    const parts = domain.split('.');
+    const namePart = parts.find(p => !skipParts.has(p.toLowerCase())) || parts[0];
+    const companyName = namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
+
+    const position    = (requestedPosition && requestedPosition.trim()) || 'Software Developer';
+    const senderName  = process.env.SENDER_NAME  || 'Applicant';
+    const senderPhone = process.env.SENDER_PHONE  || '';
+    const senderEmail = process.env.SMTP_USER     || '';
+
+    if (!senderEmail || senderEmail === 'your-email@gmail.com') {
+      return res.status(400).json({ error: 'SMTP not configured. Please update .env file.' });
+    }
+
+    // Build email subject
+    const subject = `Application for ${position} Position – ${senderName}`;
+
+    // Build HTML body (inline — no external template file needed server-side)
+    const htmlBody = buildApplicationEmail({
+      company:  companyName,
+      hrName:   'Hiring Manager',
+      position,
+      name:     senderName,
+      phone:    senderPhone,
+      email:    senderEmail
+    });
+
+    const transporter = createTransporter();
+    try { await transporter.verify(); } catch (ve) {
+      return res.status(400).json({ error: 'SMTP connection failed.', details: ve.message });
+    }
+
+    const mailOptions = {
+      from: `"${senderName}" <${senderEmail}>`,
+      to:   companyEmail,
+      subject,
+      html: htmlBody,
+      attachments: []
+    };
+
+    if (uploadedResumePath && fs.existsSync(uploadedResumePath)) {
+      mailOptions.attachments.push({
+        filename: uploadedResumeOriginalName || 'Resume.pdf',
+        path:     uploadedResumePath
+      });
+    }
+
+    // Retry logic for transient SMTP errors
+    const SERVER_MAX_RETRIES = 2;
+    const SERVER_RETRY_DELAYS = [3000, 6000];
+    let lastErr = null;
+
+    for (let attempt = 0; attempt <= SERVER_MAX_RETRIES; attempt++) {
+      try {
+        await transporter.sendMail(mailOptions);
+        lastErr = null;
+        break; // success
+      } catch (sendErr) {
+        lastErr = sendErr;
+        const isTransient = /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKET|too many|rate/i.test(sendErr.message);
+        if (isTransient && attempt < SERVER_MAX_RETRIES) {
+          console.log(`  ⟳ Transient SMTP error for ${companyEmail}, retrying (${attempt + 1}/${SERVER_MAX_RETRIES})...`);
+          await new Promise(r => setTimeout(r, SERVER_RETRY_DELAYS[attempt] || 6000));
+          continue;
+        }
+        throw sendErr; // non-transient or retries exhausted
+      }
+    }
+
+    sentEmailsLog.push({
+      email:   companyEmail,
+      company: companyName,
+      subject,
+      sentAt:  new Date().toISOString(),
+      status:  'sent'
+    });
+    saveData();
+
+    console.log(`✅ Quick-sent to ${companyEmail} (${companyName})`);
+    res.json({ success: true, company: companyName, email: companyEmail });
+
+  } catch (error) {
+    console.error('Quick-send error:', error);
+    res.status(500).json({ error: 'Failed to send email', details: error.message });
+  }
+});
+
+/**
+ * Build a professional HTML application email (server-side mirror of the client template)
+ */
+function buildApplicationEmail({ company, hrName, position, name, phone, email }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Job Application</title>
+<style>
+  body { margin: 0; padding: 0; background: #f5f5f5; font-family: 'Segoe UI', Arial, sans-serif; }
+  .wrap { max-width: 580px; margin: 32px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .body { padding: 36px 40px; color: #222222; font-size: 15px; line-height: 1.75; }
+  .body p { margin: 0 0 16px; }
+  .body a { color: #4f46e5; text-decoration: none; }
+  .divider { border: none; border-top: 1px solid #e5e5e5; margin: 28px 0; }
+  .sig-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .sig-line { font-size: 13px; color: #666666; margin: 2px 0; }
+  .footer { background: #f9f9f9; padding: 16px 40px; border-top: 1px solid #e5e5e5; font-size: 11px; color: #aaaaaa; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="body">
+    <p>Dear ${hrName},</p>
+
+    <p>I hope you are doing well. I am writing to express my interest in the <strong>${position}</strong> role at <strong>${company}</strong>. I came across your company and was genuinely impressed by your work — I would love the opportunity to contribute as a fresher.</p>
+
+    <p>I am a recent Computer Science graduate with a solid foundation in programming, data structures, and web development. I am a quick learner, a team player, and I am eager to grow with a company that values innovation and quality.</p>
+
+    <p>I have attached my resume for your review. I would be happy to connect for a quick call at your convenience.</p>
+
+    <p>Thank you for your time and consideration. I look forward to hearing from you.</p>
+
+    <hr class="divider"/>
+
+    <div class="sig-name">${name}</div>
+    <div class="sig-line">&#9993; ${email}</div>
+    ${phone ? `<div class="sig-line">&#128222; ${phone}</div>` : ''}
+  </div>
+  <div class="footer">This email was sent as a job application enquiry. If received in error, please disregard.</div>
+</div>
+</body>
+</html>`;
+}
+
+
+/**
  * POST /api/clear-history
  * Clear search history to allow re-fetching companies
  */

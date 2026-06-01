@@ -1,10 +1,11 @@
 /**
- * JobReach â€” Main Application Logic
+ * JobReach - Main Application Logic
+ * Quick-send mode: user only enters a company email — everything else is automatic.
  */
 (function () {
   'use strict';
 
-  // â”€â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- State ---
   const state = {
     jobs: [],
     selectedJobs: new Set(),
@@ -14,10 +15,11 @@
     currentPage: 1,
     emailTemplate: window.DEFAULT_EMAIL_TEMPLATE || '',
     resumeUploaded: false,
-    resumeName: ''
+    resumeName: '',
+    sentLog: []
   };
 
-  // â”€â”€â”€ DOM Cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- DOM Cache ---
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
 
@@ -39,12 +41,28 @@
     loadMoreBtn: $('#load-more-btn'),
     selectAllBtn: $('#select-all-btn'),
     addToOutreachBtn: $('#add-to-outreach-btn'),
-    recipientsList: $('#recipients-list'),
-    recipientCount: $('#recipient-count'),
-    bulkActions: $('#bulk-actions'),
-    clearRecipientsBtn: $('#clear-recipients-btn'),
-    sendAllBtn: $('#send-all-btn'),
-    sendCount: $('#send-count'),
+    // Bulk send
+    tagEmailInput: $('#tag-email-input'),
+    tagChips: $('#tag-chips'),
+    tagInputWrap: $('#tag-input-wrap'),
+    bulkPositionInput: $('#bulk-position-input'),
+    bulkSendBtn: $('#bulk-send-btn'),
+    bulkSendLabel: $('#bulk-send-label'),
+    bulkClearBtn: $('#bulk-clear-btn'),
+    bulkSendMeta: $('#bulk-send-meta'),
+    bulkCountBadge: $('#bulk-count-badge'),
+    bulkProgressWrap: $('#bulk-progress-wrap'),
+    bulkProgressBar: $('#bulk-progress-bar'),
+    bulkProgLabel: $('#bulk-prog-label'),
+    bulkProgPct: $('#bulk-prog-pct'),
+    bulkProgSent: $('#bulk-prog-sent'),
+    bulkProgFailed: $('#bulk-prog-failed'),
+    bulkProgTotal: $('#bulk-prog-total'),
+    bulkLog: $('#bulk-log'),
+    sentLogList: $('#sent-log-list'),
+    sentLogCount: $('#sent-log-count'),
+    sentLogEmpty: $('#sent-log-empty'),
+    // Resume
     resumeInput: $('#resume-input'),
     browseBtn: $('#browse-btn'),
     uploadArea: $('#upload-area'),
@@ -52,24 +70,14 @@
     resumeNameEl: $('#resume-name'),
     resumeSizeEl: $('#resume-size'),
     removeResumeBtn: $('#remove-resume-btn'),
+    // Template (right panel - kept for advanced users)
     emailSubject: $('#email-subject'),
     senderNameInput: $('#sender-name-input'),
     senderPhoneInput: $('#sender-phone-input'),
     templateBody: $('#template-body'),
     resetTemplateBtn: $('#reset-template-btn'),
     previewEmailBtn: $('#preview-email-btn'),
-    // manual add
-    addName: $('#add-name'),
-    addEmail: $('#add-email'),
-    addCompany: $('#add-company'),
-    addRecipientBtn: $('#add-recipient-btn'),
-    sendingProgress: $('#sending-progress'),
-    progressBar: $('#progress-bar'),
-    progressSubtitle: $('#progress-subtitle'),
-    progSent: $('#prog-sent'),
-    progFailed: $('#prog-failed'),
-    progTotal: $('#prog-total'),
-    progressLog: $('#progress-log'),
+    // Settings
     testSmtpBtn: $('#test-smtp-btn'),
     clearHistoryBtn: $('#clear-history-btn'),
     smtpDot: $('#smtp-dot'),
@@ -84,33 +92,42 @@
     modalClose: $('#modal-close')
   };
 
-  // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Init ---
   function init() {
     lucide.createIcons();
     setupNavTabs();
     setupSearch();
     setupJobSelection();
-    setupOutreach();
+    setupBulkSend();
     setupResumeUpload();
     setupEmailTemplate();
     setupSettings();
     setupModal();
     checkSmtpStatus();
     checkResumeStatus();
+    loadSenderInfo();
+    loadSentLog();
   }
 
-  // â”€â”€â”€ Navigation Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Load sender info from .env via server ---
+  async function loadSenderInfo() {
+    try {
+      const res = await fetch('/api/sender-info');
+      const data = await res.json();
+      if (data.name  && dom.senderNameInput)  dom.senderNameInput.value  = data.name;
+      if (data.phone && dom.senderPhoneInput) dom.senderPhoneInput.value = data.phone;
+    } catch (e) { /* silent */ }
+  }
+
+  // --- Navigation Tabs ---
   function setupNavTabs() {
     function switchTab(tab) {
-      // top nav
       $$('.nav-btn').forEach(b => b.classList.remove('active'));
       const topBtn = $(`[data-tab="${tab}"].nav-btn`);
       if (topBtn) topBtn.classList.add('active');
-      // bottom nav
       $$('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
       const botBtn = $(`[data-tab="${tab}"].bottom-nav-btn`);
       if (botBtn) botBtn.classList.add('active');
-      // panels
       $$('.tab-panel').forEach(p => p.classList.remove('active'));
       $(`#panel-${tab}`).classList.add('active');
       lucide.createIcons();
@@ -124,7 +141,7 @@
     );
   }
 
-  // â”€â”€â”€ Search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Search ---
   function setupSearch() {
     dom.searchForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -173,7 +190,7 @@
         dom.emptyState.style.display = 'none';
         dom.loadMoreWrap.style.display = 'block';
         const totalAvail = data.totalAvailable || data.total;
-        dom.resultsTitle.textContent = `Jobs in ${state.currentCity} â€” ${state.jobs.length} shown of ${totalAvail} found`;
+        dom.resultsTitle.textContent = `Jobs in ${state.currentCity} - ${state.jobs.length} shown of ${totalAvail} found`;
         dom.loadMoreBtn.textContent = `Load More (${totalAvail - state.jobs.length} remaining)`;
         toast('success', `Found ${data.jobs.length} new job listings!`);
       } else {
@@ -200,7 +217,7 @@
 
       const emailHtml = job.email
         ? `<div class="job-email"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>${job.email}</div>`
-        : `<p class="job-no-email">No email found â€” click to find</p>`;
+        : `<p class="job-no-email">No email found - click to find</p>`;
 
       const posted = timeAgo(job.posted);
 
@@ -217,7 +234,14 @@
         <p class="job-desc">${esc(job.description)}</p>
       `;
 
-      card.addEventListener('click', () => toggleJobSelection(job.id));
+      // Click on card → add email to bulk list or toggle selection
+      card.addEventListener('click', () => {
+        if (job.email) {
+          prefillBulkEmail(job.email);
+        } else {
+          toggleJobSelection(job.id);
+        }
+      });
       fragment.appendChild(card);
     });
 
@@ -225,7 +249,6 @@
     dom.jobsGrid.appendChild(fragment);
   }
 
-  // â”€â”€â”€ Job Selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupJobSelection() {
     dom.selectAllBtn.addEventListener('click', () => {
       const allSelected = state.selectedJobs.size === state.jobs.length;
@@ -238,29 +261,35 @@
       updateStats();
     });
 
-    dom.addToOutreachBtn.addEventListener('click', () => {
-      let added = 0;
-      state.jobs.filter(j => state.selectedJobs.has(j.id) && j.email).forEach(job => {
-        const exists = state.recipients.find(r => r.email === job.email);
-        if (!exists) {
-          state.recipients.push({
-            company: job.company,
-            email: job.email,
-            position: job.title
-          });
-          added++;
+    if (dom.addToOutreachBtn) {
+      dom.addToOutreachBtn.addEventListener('click', () => {
+        const jobsWithEmail = state.jobs.filter(j => state.selectedJobs.has(j.id) && j.email);
+        if (jobsWithEmail.length === 0) {
+          toast('info', 'No selected jobs have email addresses.');
+          return;
         }
+        // Add all emails to the bulk list
+        let added = 0;
+        jobsWithEmail.forEach(j => {
+          if (!bulkEmails.includes(j.email.toLowerCase())) {
+            bulkEmails.push(j.email.toLowerCase());
+            added++;
+          }
+        });
+        renderChips();
+        updateBulkMeta();
+        // Switch to outreach tab
+        $$('.nav-btn').forEach(b => b.classList.remove('active'));
+        $('#nav-outreach').classList.add('active');
+        $$('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
+        const bot = $('[data-tab="outreach"].bottom-nav-btn');
+        if (bot) bot.classList.add('active');
+        $$('.tab-panel').forEach(p => p.classList.remove('active'));
+        $('#panel-outreach').classList.add('active');
+        lucide.createIcons();
+        toast('success', `Added ${added} email${added !== 1 ? 's' : ''} to bulk list!`);
       });
-      renderRecipients();
-      toast('success', `Added ${added} contacts to outreach list.`);
-
-      // Switch to outreach tab
-      $$('.nav-btn').forEach(b => b.classList.remove('active'));
-      $('#nav-outreach').classList.add('active');
-      $$('.tab-panel').forEach(p => p.classList.remove('active'));
-      $('#panel-outreach').classList.add('active');
-      lucide.createIcons();
-    });
+    }
   }
 
   function toggleJobSelection(id) {
@@ -291,94 +320,353 @@
     dom.statsRow.style.display = state.jobs.length > 0 ? 'flex' : 'none';
   }
 
-  // â”€â”€â”€ Outreach / Recipients â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  function setupOutreach() {
-    // Manual add
-    dom.addRecipientBtn.addEventListener('click', () => {
-      const email   = dom.addEmail.value.trim();
-      const company = dom.addCompany.value.trim();
-      const name    = dom.addName.value.trim();
+  // ══════════════════════════════════════════════════
+  //  BULK SEND — Tag-input multi-email system
+  // ══════════════════════════════════════════════════
 
-      if (!email || !company) {
-        toast('error', 'Email and company name are required.');
+  // Holds all queued email addresses (deduped)
+  const bulkEmails = [];
+
+  function setupBulkSend() {
+    if (!dom.tagEmailInput) return;
+
+    // Click on the wrapper → focus the input
+    if (dom.tagInputWrap) {
+      dom.tagInputWrap.addEventListener('click', () => dom.tagEmailInput.focus());
+    }
+
+    dom.tagEmailInput.addEventListener('keydown', (e) => {
+      const val = dom.tagEmailInput.value.trim();
+
+      // Enter or comma → add chip
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        if (val) addChip(val);
         return;
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        toast('error', 'Please enter a valid email address.');
-        return;
+
+      // Backspace on empty input → remove last chip
+      if (e.key === 'Backspace' && !val && bulkEmails.length > 0) {
+        removeChip(bulkEmails[bulkEmails.length - 1]);
       }
-      if (state.recipients.find(r => r.email === email)) {
-        toast('info', 'This email is already in the list.');
-        return;
-      }
-      state.recipients.push({ email, company, name: name || 'HR Team', position: 'Software Developer' });
-      dom.addEmail.value   = '';
-      dom.addCompany.value = '';
-      dom.addName.value    = '';
-      renderRecipients();
-      toast('success', `Added ${company} to outreach list.`);
     });
 
-    // Allow pressing Enter in email field to add
-    dom.addEmail.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); dom.addRecipientBtn.click(); }
+    // Also handle paste — split by comma/newline/semicolon and add all
+    dom.tagEmailInput.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData('text');
+      const parts = pasted.split(/[,;\n\r]+/);
+      parts.forEach(p => { const t = p.trim(); if (t) addChip(t); });
     });
 
-    dom.clearRecipientsBtn.addEventListener('click', () => {
-      state.recipients = [];
-      renderRecipients();
-      toast('info', 'Recipient list cleared.');
-    });
+    // Send All button
+    if (dom.bulkSendBtn) {
+      dom.bulkSendBtn.addEventListener('click', startBulkSend);
+    }
 
-    dom.sendAllBtn.addEventListener('click', () => sendBulkEmails());
+    // Clear All
+    if (dom.bulkClearBtn) {
+      dom.bulkClearBtn.addEventListener('click', () => {
+        bulkEmails.length = 0;
+        renderChips();
+        updateBulkMeta();
+      });
+    }
   }
 
-  function renderRecipients() {
-    if (state.recipients.length === 0) {
-      dom.recipientsList.innerHTML = `
-        <div class="empty-recipients">
-          <i data-lucide="inbox"></i>
-          <p>No contacts yet</p>
-          <span>Add manually above or from job search results</span>
-        </div>`;
-      dom.bulkActions.style.display = 'none';
-      dom.recipientCount.textContent = '0 contacts';
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  function addChip(email) {
+    if (!isValidEmail(email)) {
+      toast('error', `"${email}" doesn't look like a valid email.`);
+      return;
+    }
+    if (bulkEmails.includes(email.toLowerCase())) {
+      toast('info', `${email} is already in the list.`);
+      dom.tagEmailInput.value = '';
+      return;
+    }
+    bulkEmails.push(email.toLowerCase());
+    dom.tagEmailInput.value = '';
+    renderChips();
+    updateBulkMeta();
+  }
+
+  function removeChip(email) {
+    const idx = bulkEmails.indexOf(email);
+    if (idx !== -1) bulkEmails.splice(idx, 1);
+    renderChips();
+    updateBulkMeta();
+  }
+
+  function renderChips() {
+    if (!dom.tagChips) return;
+    dom.tagChips.innerHTML = '';
+    bulkEmails.forEach(email => {
+      const chip = document.createElement('div');
+      chip.className = 'email-chip';
+      chip.title = email;
+      chip.innerHTML = `<span>${esc(email)}</span><button class="chip-remove" aria-label="Remove">&times;</button>`;
+      chip.querySelector('.chip-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeChip(email);
+      });
+      dom.tagChips.appendChild(chip);
+    });
+  }
+
+  function updateBulkMeta() {
+    const n = bulkEmails.length;
+    if (dom.bulkSendBtn) dom.bulkSendBtn.disabled = n === 0;
+    if (dom.bulkClearBtn) dom.bulkClearBtn.style.display = n > 0 ? '' : 'none';
+    if (dom.bulkSendMeta) dom.bulkSendMeta.style.display = n > 0 ? '' : 'none';
+    if (dom.bulkCountBadge) dom.bulkCountBadge.textContent = `${n} email${n !== 1 ? 's' : ''} queued`;
+    if (dom.bulkSendLabel) dom.bulkSendLabel.textContent = n > 0 ? `Send All (${n})` : 'Send All';
+  }
+
+  /** Fire all queued emails one-by-one with live progress + automatic retry */
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [5000, 10000, 20000]; // 5s, 10s, 20s exponential backoff
+
+  async function sendOneEmail(email, position) {
+    const res = await fetch('/api/quick-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyEmail: email, position })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Send failed');
+    return data;
+  }
+
+  async function startBulkSend() {
+    if (bulkEmails.length === 0) return;
+
+    const total = bulkEmails.length;
+    const position = (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) || 'Software Developer';
+    let sent = 0, failed = 0;
+
+    // Lock UI
+    if (dom.bulkSendBtn) { dom.bulkSendBtn.disabled = true; dom.bulkSendLabel.textContent = 'Sending…'; }
+    if (dom.tagEmailInput) dom.tagEmailInput.disabled = true;
+    if (dom.bulkClearBtn) dom.bulkClearBtn.disabled = true;
+
+    // Show progress section
+    if (dom.bulkProgressWrap) dom.bulkProgressWrap.style.display = 'block';
+    if (dom.bulkLog) dom.bulkLog.innerHTML = '';
+    if (dom.bulkProgSent) dom.bulkProgSent.textContent = '0';
+    if (dom.bulkProgFailed) dom.bulkProgFailed.textContent = '0';
+    if (dom.bulkProgTotal) dom.bulkProgTotal.textContent = total;
+    if (dom.bulkProgPct) dom.bulkProgPct.textContent = '0%';
+    if (dom.bulkProgLabel) dom.bulkProgLabel.textContent = `Sending 1 of ${total}…`;
+    if (dom.bulkProgressBar) dom.bulkProgressBar.style.width = '0%';
+
+    // Track log entry elements for retry updates
+    const logEntries = new Map();
+
+    // Send emails sequentially
+    for (let i = 0; i < bulkEmails.length; i++) {
+      const email = bulkEmails[i];
+      const companyName = deriveName(email);
+
+      if (dom.bulkProgLabel) dom.bulkProgLabel.textContent = `Sending ${i + 1} of ${total} — ${companyName}…`;
+
+      let ok = false;
+      let errMsg = '';
+      let attempts = 0;
+
+      // Try up to MAX_RETRIES + 1 times (initial + retries)
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        attempts = attempt + 1;
+        try {
+          const data = await sendOneEmail(email, position);
+          ok = true;
+          sent++;
+          addToSentLog({ email, company: data.company || companyName, status: 'sent', ts: new Date() });
+          break; // success, no retry
+        } catch (err) {
+          errMsg = err.message;
+
+          if (attempt < MAX_RETRIES) {
+            // Show retry status in the log
+            const retryDelay = RETRY_DELAYS[attempt] || 20000;
+            const retryNum = attempt + 1;
+
+            if (dom.bulkProgLabel) {
+              dom.bulkProgLabel.textContent = `⟳ Retry ${retryNum}/${MAX_RETRIES} for ${companyName} in ${retryDelay / 1000}s…`;
+            }
+
+            // Create or update log entry to show retrying state
+            if (dom.bulkLog) {
+              let entry = logEntries.get(email);
+              if (!entry) {
+                entry = document.createElement('div');
+                entry.className = 'bulk-log-entry retrying';
+                dom.bulkLog.prepend(entry);
+                logEntries.set(email, entry);
+              }
+              entry.className = 'bulk-log-entry retrying';
+              entry.innerHTML = `
+                <div class="bulk-log-dot retrying-dot"></div>
+                <div class="bulk-log-company">${esc(companyName)}</div>
+                <div class="bulk-log-email">${esc(email)}</div>
+                <span class="bulk-log-status retrying-status">⟳ Retry ${retryNum}/${MAX_RETRIES}</span>
+                <span style="font-size:.68rem;color:var(--yellow, #eab308);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" title="${esc(errMsg)}">${esc(errMsg)}</span>
+              `;
+            }
+
+            toast('info', `Retrying ${companyName} (attempt ${retryNum}/${MAX_RETRIES})…`);
+
+            // Wait with countdown effect
+            await new Promise(r => setTimeout(r, retryDelay));
+          } else {
+            // All retries exhausted
+            failed++;
+            addToSentLog({ email, company: companyName, status: 'failed', error: `Failed after ${MAX_RETRIES} retries: ${errMsg}`, ts: new Date() });
+          }
+        }
+      }
+
+      // Update progress
+      const done = i + 1;
+      const pct = Math.round((done / total) * 100);
+      if (dom.bulkProgressBar) dom.bulkProgressBar.style.width = pct + '%';
+      if (dom.bulkProgPct) dom.bulkProgPct.textContent = pct + '%';
+      if (dom.bulkProgSent) dom.bulkProgSent.textContent = sent;
+      if (dom.bulkProgFailed) dom.bulkProgFailed.textContent = failed;
+
+      // Update or create final log entry
+      if (dom.bulkLog) {
+        let entry = logEntries.get(email);
+        if (!entry) {
+          entry = document.createElement('div');
+          dom.bulkLog.prepend(entry);
+          logEntries.set(email, entry);
+        }
+        entry.className = `bulk-log-entry ${ok ? 'ok' : 'fail'}`;
+        const retryTag = attempts > 1
+          ? `<span class="bulk-log-retry-badge">${ok ? '✓' : '✗'} ${attempts} attempt${attempts !== 1 ? 's' : ''}</span>`
+          : '';
+        entry.innerHTML = `
+          <div class="bulk-log-dot"></div>
+          <div class="bulk-log-company">${esc(companyName)}</div>
+          <div class="bulk-log-email">${esc(email)}</div>
+          <span class="bulk-log-status">${ok ? 'Sent ✓' : 'Failed'}</span>
+          ${retryTag}
+        `;
+        if (!ok) {
+          const errEl = document.createElement('span');
+          errEl.style.cssText = 'font-size:.68rem;color:var(--red);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px';
+          errEl.title = errMsg;
+          errEl.textContent = `After ${attempts} attempts: ${errMsg}`;
+          entry.appendChild(errEl);
+        }
+      }
+
+      lucide.createIcons();
+
+      // Delay between emails (rate limiting)
+      if (i < bulkEmails.length - 1) {
+        await new Promise(r => setTimeout(r, 3200));
+      }
+    }
+
+    // Done!
+    if (dom.bulkProgLabel) dom.bulkProgLabel.textContent = `✅ Done! ${sent} sent, ${failed} failed.`;
+    toast(failed === 0 ? 'success' : 'info', `Bulk send complete: ${sent} sent, ${failed} failed.`);
+
+    // Clear the chips & reset UI
+    bulkEmails.length = 0;
+    renderChips();
+    updateBulkMeta();
+
+    if (dom.tagEmailInput) dom.tagEmailInput.disabled = false;
+    if (dom.bulkClearBtn) { dom.bulkClearBtn.disabled = false; }
+  }
+
+  // Keep clicking a job with email → adds to bulk list instead of old quick-send
+  function prefillBulkEmail(email) {
+    if (!email) return;
+    addChip(email);
+    // Switch to outreach tab
+    $$('.nav-btn').forEach(b => b.classList.remove('active'));
+    $('#nav-outreach').classList.add('active');
+    $$('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
+    const bot = $('[data-tab="outreach"].bottom-nav-btn');
+    if (bot) bot.classList.add('active');
+    $$('.tab-panel').forEach(p => p.classList.remove('active'));
+    $('#panel-outreach').classList.add('active');
+    lucide.createIcons();
+    if (dom.tagEmailInput) dom.tagEmailInput.focus();
+    toast('info', `Added ${email} to bulk list. Add more or hit Send All!`);
+  }
+
+  // --- Sent Log UI ---
+  function addToSentLog(entry) {
+    state.sentLog.unshift(entry); // newest first
+    renderSentLog();
+  }
+
+  function renderSentLog() {
+    if (!dom.sentLogList) return;
+    if (state.sentLog.length === 0) {
+      dom.sentLogList.innerHTML = `<div class="empty-recipients" id="sent-log-empty"><i data-lucide="inbox"></i><p>No emails sent yet</p></div>`;
+      if (dom.sentLogCount) dom.sentLogCount.textContent = '';
       lucide.createIcons();
       return;
     }
-
-    dom.recipientCount.textContent = `${state.recipients.length} contact${state.recipients.length > 1 ? 's' : ''}`;
-    dom.sendCount.textContent = state.recipients.length;
-    dom.bulkActions.style.display = 'flex';
-
+    if (dom.sentLogCount) dom.sentLogCount.textContent = state.sentLog.length;
     let html = '';
-    state.recipients.forEach((r, i) => {
-      const initials = r.company.substring(0, 2).toUpperCase();
+    state.sentLog.forEach((entry, i) => {
+      const initials = (entry.company || 'CO').substring(0, 2).toUpperCase();
+      const timeStr  = entry.ts ? entry.ts.toLocaleTimeString() : '';
+      const ok = entry.status === 'sent';
       html += `
-        <div class="recipient-item" data-index="${i}" id="recipient-row-${i}">
-          <div class="recipient-avatar">${initials}</div>
+        <div class="recipient-item sent-log-item ${ok ? '' : 'log-failed'}">
+          <div class="recipient-avatar" style="background: ${ok ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color: ${ok ? 'var(--green)' : '#ef4444'};">${initials}</div>
           <div class="recipient-info">
-            <strong>${esc(r.company)}</strong>
-            <small>${esc(r.email)}</small>
+            <strong>${esc(entry.company || entry.email)}</strong>
+            <small>${esc(entry.email)}</small>
           </div>
-          <span class="recipient-status" id="rstat-${i}"></span>
-          <button class="btn-icon recipient-remove" data-index="${i}" title="Remove">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          </button>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:70px;">
+            <span class="recipient-status ${ok ? 'ok' : 'err'}">${ok ? 'Sent ✓' : 'Failed'}</span>
+            <small style="color:var(--muted);font-size:10px;">${timeStr}</small>
+          </div>
         </div>`;
     });
-    dom.recipientsList.innerHTML = html;
-
-    dom.recipientsList.querySelectorAll('.recipient-remove').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.recipients.splice(parseInt(btn.dataset.index), 1);
-        renderRecipients();
-      });
-    });
+    dom.sentLogList.innerHTML = html;
   }
 
-  // â”€â”€â”€ Resume Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  async function loadSentLog() {
+    try {
+      const res = await fetch('/api/email-log');
+      const data = await res.json();
+      if (data.success && data.log && data.log.length > 0) {
+        state.sentLog = data.log.map(entry => ({
+          email: entry.email,
+          company: entry.company,
+          status: entry.status || 'sent',
+          error: entry.error || null,
+          ts: entry.sentAt ? new Date(entry.sentAt) : null
+        })).reverse(); // newest first
+        renderSentLog();
+      }
+    } catch (e) { /* silent */ }
+  }
+  /** Derive company name from an email domain client-side (mirrors server logic) */
+  function deriveName(email) {
+    try {
+      const domain = email.split('@')[1];
+      const skip = new Set(['com','co','in','org','net','io','ai','app','dev','tech','gov','edu','uk','us','au']);
+      const parts = domain.split('.');
+      const name = parts.find(p => !skip.has(p.toLowerCase())) || parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+    } catch (_) { return ''; }
+  }
+
+  // --- Resume Upload ---
   function setupResumeUpload() {
     dom.browseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -449,8 +737,8 @@
     } catch (e) { /* silent */ }
   }
 
-  // â”€â”€â”€ Email Template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const DEFAULT_TEMPLATE =
+  // --- Email Template (right panel — advanced use) ---
+  const DEFAULT_TEMPLATE = window.DEFAULT_EMAIL_TEMPLATE ||
 `Dear {hr_name},
 
 I hope this message finds you well. I came across {company} and was genuinely impressed by your work. I am a recent Computer Science graduate eager to start my career in software development.
@@ -467,19 +755,26 @@ Warm regards,
 {phone}`;
 
   function setupEmailTemplate() {
-    dom.templateBody.value = DEFAULT_TEMPLATE;
+    if (dom.templateBody) dom.templateBody.value = DEFAULT_TEMPLATE;
 
-    dom.resetTemplateBtn.addEventListener('click', () => {
-      dom.templateBody.value = DEFAULT_TEMPLATE;
-      toast('info', 'Template reset to default.');
-    });
+    if (dom.resetTemplateBtn) {
+      dom.resetTemplateBtn.addEventListener('click', () => {
+        dom.templateBody.value = DEFAULT_TEMPLATE;
+        toast('info', 'Template reset to default.');
+      });
+    }
 
-    dom.previewEmailBtn.addEventListener('click', () => {
-      const filled = fillTemplate(dom.templateBody.value);
-      // Convert plain text to HTML for preview
-      dom.modalBody.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.7;">${esc(filled)}</pre>`;
-      dom.modalOverlay.style.display = 'flex';
-    });
+    if (dom.previewEmailBtn) {
+      dom.previewEmailBtn.addEventListener('click', () => {
+        const filled = buildHtmlBody(dom.templateBody.value);
+        if (filled.trim().startsWith('<')) {
+          dom.modalBody.innerHTML = filled;
+        } else {
+          dom.modalBody.innerHTML = `<div style="padding:24px;font-family:Arial,sans-serif;font-size:14px;line-height:1.8;white-space:pre-wrap;">${filled}</div>`;
+        }
+        dom.modalOverlay.style.display = 'flex';
+      });
+    }
   }
 
   function fillTemplate(text, recipient) {
@@ -488,124 +783,50 @@ Warm regards,
       .replace(/{company}/g,  r.company  || 'Your Company')
       .replace(/{hr_name}/g,  r.name     || 'Hiring Manager')
       .replace(/{position}/g, r.position || 'Software Developer')
-      .replace(/{name}/g,     dom.senderNameInput.value  || 'Your Name')
-      .replace(/{phone}/g,    dom.senderPhoneInput.value || '+91-XXXXXXXXXX')
+      .replace(/{name}/g,     (dom.senderNameInput  && dom.senderNameInput.value)  || 'Your Name')
+      .replace(/{phone}/g,    (dom.senderPhoneInput && dom.senderPhoneInput.value) || '+91-XXXXXXXXXX')
       .replace(/{email}/g,    'your-email@gmail.com');
   }
 
-  // â”€â”€â”€ Bulk Email Sending â€” one email per recipient â”€â”€â”€â”€â”€â”€â”€â”€
-  async function sendBulkEmails() {
-    if (state.recipients.length === 0) {
-      toast('error', 'No recipients to send to.');
-      return;
-    }
-    if (!dom.senderNameInput.value.trim()) {
-      toast('error', 'Please enter your name in the template section.');
-      return;
-    }
-    const subject = dom.emailSubject.value.trim();
-    if (!subject) {
-      toast('error', 'Please enter an email subject.');
-      return;
-    }
-
-    const total = state.recipients.length;
-    let sent = 0, failed = 0;
-
-    dom.sendingProgress.style.display = 'block';
-    dom.progressBar.style.width = '0%';
-    dom.progSent.textContent   = '0';
-    dom.progFailed.textContent = '0';
-    dom.progTotal.textContent  = total;
-    dom.progressLog.innerHTML  = '';
-    dom.progressSubtitle.textContent = `Sending 1 of ${total}...`;
-    dom.sendAllBtn.disabled = true;
-
-    for (let i = 0; i < state.recipients.length; i++) {
-      const r = state.recipients[i];
-      const rstatEl = document.getElementById(`rstat-${i}`);
-
-      // Mark sending
-      if (rstatEl) { rstatEl.textContent = 'â³'; rstatEl.className = 'recipient-status sending'; }
-      dom.progressSubtitle.textContent = `Sending ${i + 1} of ${total}: ${r.company}...`;
-
-      // Build individual plain-text body, convert newlines to <br> for email
-      const plainBody = fillTemplate(dom.templateBody.value, r);
-      const htmlBody  = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#222;max-width:600px;">${plainBody.replace(/\n/g, '<br>')}</div>`;
-      const subjectFilled = subject
-        .replace(/{company}/g,  r.company  || 'Your Company')
-        .replace(/{name}/g,     dom.senderNameInput.value || 'Applicant')
-        .replace(/{hr_name}/g,  r.name     || 'Hiring Manager');
-
-      try {
-        const res = await fetch('/api/send-emails', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recipients: [r],          // ONE recipient at a time
-            subject: subjectFilled,
-            htmlBody,
-            senderName:  dom.senderNameInput.value.trim(),
-            senderPhone: dom.senderPhoneInput.value.trim()
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        const result = data.results && data.results[0];
-        if (result && result.status === 'sent') {
-          sent++;
-          if (rstatEl) { rstatEl.textContent = 'âœ“ Sent'; rstatEl.className = 'recipient-status ok'; }
-          dom.progressLog.innerHTML += `<div class="log-entry success">âœ“ ${esc(r.company)} â€” ${esc(r.email)}</div>`;
-        } else {
-          throw new Error(result ? result.error : 'Unknown error');
-        }
-      } catch (err) {
-        failed++;
-        if (rstatEl) { rstatEl.textContent = 'âœ— Failed'; rstatEl.className = 'recipient-status err'; }
-        dom.progressLog.innerHTML += `<div class="log-entry error">âœ— ${esc(r.company)} â€” ${esc(r.email)}: ${esc(err.message)}</div>`;
-      }
-
-      dom.progSent.textContent   = sent;
-      dom.progFailed.textContent = failed;
-      dom.progressBar.style.width = `${Math.round(((i + 1) / total) * 100)}%`;
-      dom.progressLog.scrollTop   = dom.progressLog.scrollHeight;
-    }
-
-    dom.progressSubtitle.textContent = `Done! ${sent} sent, ${failed} failed.`;
-    dom.sendAllBtn.disabled = false;
-    toast(failed === 0 ? 'success' : 'info', `Emails sent: ${sent}/${total}`);
+  function buildHtmlBody(templateText, recipient) {
+    const filled = fillTemplate(templateText || (dom.templateBody && dom.templateBody.value), recipient);
+    if (filled.trim().startsWith('<')) return filled;
+    return `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#222;max-width:600px;">${filled.replace(/\n/g, '<br>')}</div>`;
   }
 
-  // â”€â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Settings ---
   function setupSettings() {
-    dom.testSmtpBtn.addEventListener('click', async () => {
-      dom.testSmtpBtn.disabled = true;
-      try {
-        const res = await fetch('/api/test-smtp', { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-          toast('success', 'SMTP connection successful!');
-          setSmtpOnline(true, '');
-        } else {
-          throw new Error(data.error || data.details);
+    if (dom.testSmtpBtn) {
+      dom.testSmtpBtn.addEventListener('click', async () => {
+        dom.testSmtpBtn.disabled = true;
+        try {
+          const res = await fetch('/api/test-smtp', { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            toast('success', 'SMTP connection successful!');
+            setSmtpOnline(true, '');
+          } else {
+            throw new Error(data.error || data.details);
+          }
+        } catch (err) {
+          toast('error', 'SMTP test failed: ' + err.message);
+          setSmtpOnline(false, '');
+        } finally {
+          dom.testSmtpBtn.disabled = false;
         }
-      } catch (err) {
-        toast('error', 'SMTP test failed: ' + err.message);
-        setSmtpOnline(false, '');
-      } finally {
-        dom.testSmtpBtn.disabled = false;
-      }
-    });
+      });
+    }
 
-    dom.clearHistoryBtn.addEventListener('click', async () => {
-      try {
-        await fetch('/api/clear-history', { method: 'POST' });
-        toast('success', 'Search history cleared. You can now re-discover companies.');
-      } catch (e) {
-        toast('error', 'Failed to clear history.');
-      }
-    });
+    if (dom.clearHistoryBtn) {
+      dom.clearHistoryBtn.addEventListener('click', async () => {
+        try {
+          await fetch('/api/clear-history', { method: 'POST' });
+          toast('success', 'Search history cleared. You can now re-discover companies.');
+        } catch (e) {
+          toast('error', 'Failed to clear history.');
+        }
+      });
+    }
   }
 
   async function checkSmtpStatus() {
@@ -619,25 +840,31 @@ Warm regards,
   }
 
   function setSmtpOnline(online, email) {
-    dom.smtpDot.className = 'status-dot ' + (online ? 'online' : 'offline');
-    dom.smtpLabel.textContent = online ? 'SMTP Ready' : 'SMTP Not Set';
-    dom.smtpStatusIcon.className = 'smtp-status-icon ' + (online ? 'ok' : 'err');
-    dom.smtpStatusIcon.innerHTML = online
-      ? '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
-      : '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>';
-    dom.smtpStatusText.textContent  = online ? 'Connected & Ready' : 'Not Configured';
-    dom.smtpStatusEmail.textContent = email || 'Update .env to configure';
+    if (dom.smtpDot) dom.smtpDot.className = 'status-dot ' + (online ? 'online' : 'offline');
+    if (dom.smtpLabel) dom.smtpLabel.textContent = online ? 'SMTP Ready' : 'SMTP Not Set';
+    if (dom.smtpStatusIcon) {
+      dom.smtpStatusIcon.className = 'smtp-status-icon ' + (online ? 'ok' : 'err');
+      dom.smtpStatusIcon.innerHTML = online
+        ? '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>';
+    }
+    if (dom.smtpStatusText)  dom.smtpStatusText.textContent  = online ? 'Connected & Ready' : 'Not Configured';
+    if (dom.smtpStatusEmail) dom.smtpStatusEmail.textContent = email || 'Update .env to configure';
   }
 
-  // â”€â”€â”€ Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Modal ---
   function setupModal() {
-    dom.modalClose.addEventListener('click', () => { dom.modalOverlay.style.display = 'none'; });
-    dom.modalOverlay.addEventListener('click', (e) => {
-      if (e.target === dom.modalOverlay) dom.modalOverlay.style.display = 'none';
-    });
+    if (dom.modalClose) {
+      dom.modalClose.addEventListener('click', () => { dom.modalOverlay.style.display = 'none'; });
+    }
+    if (dom.modalOverlay) {
+      dom.modalOverlay.addEventListener('click', (e) => {
+        if (e.target === dom.modalOverlay) dom.modalOverlay.style.display = 'none';
+      });
+    }
   }
 
-  // â”€â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Utilities ---
   function showLoading(show) {
     dom.loadingState.style.display = show ? 'block' : 'none';
     if (show) {
@@ -677,6 +904,6 @@ Warm regards,
     return days + 'd ago';
   }
 
-  // â”€â”€â”€ Boot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Boot ---
   document.addEventListener('DOMContentLoaded', init);
 })();

@@ -1,6 +1,112 @@
 {
   "searchHistory": [],
-  "sentEmailsLog": [],
-  "uploadedResumePath": null,
-  "uploadedResumeOriginalName": null
+  "sentEmailsLog": [
+    {
+      "email": "amanansari1501@outlook.com",
+      "company": "v",
+      "subject": "Application for Software Developer Position – Aman Ansari",
+      "sentAt": "2026-05-15T14:30:49.208Z",
+      "status": "sent"
+    },
+    {
+      "email": "hr@opentext.com",
+      "company": "opentext",
+      "subject": "Application for  Fresher Software Developer",
+      "sentAt": "2026-05-16T16:50:01.232Z",
+      "status": "sent"
+    },
+    {
+      "email": "info@clariontech.com",
+      "company": "Clariontech",
+      "subject": "Application for  Fresher Software Developer",
+      "sentAt": "2026-05-16T17:05:01.396Z",
+      "status": "sent"
+    },
+    {
+      "email": "career@electrifex.com",
+      "company": "Electrifix",
+      "subject": "Application for Software Developer Position",
+      "sentAt": "2026-05-16T17:53:22.661Z",
+      "status": "sent"
+    },
+    {
+      "email": "amanansari1501@gmail.com",
+      "company": "Gmail",
+      "subject": "Application for Software Developer Position – Your Name",
+      "sentAt": "2026-05-23T11:05:28.120Z",
+      "status": "sent"
+    },
+    {
+      "email": "amanansari1501@gmail.com",
+      "company": "Gmail",
+      "subject": "Application for Test Engineer Position – Your Name",
+      "sentAt": "2026-05-23T11:24:38.970Z",
+      "status": "sent"
+    },
+    {
+      "email": "sde1.fullstack@careerxperts.com",
+      "company": "Careerxperts",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T07:56:19.139Z",
+      "status": "sent"
+    },
+    {
+      "email": "kumariskuow@allstate.com",
+      "company": "Allstate",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:02:43.823Z",
+      "status": "sent"
+    },
+    {
+      "email": "amit@anvistar.in",
+      "company": "Anvistar",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:02:54.508Z",
+      "status": "sent"
+    },
+    {
+      "email": "career@regotechnosolutions.com",
+      "company": "Regotechnosolutions",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:03:05.351Z",
+      "status": "sent"
+    },
+    {
+      "email": "himaja.madala@tcs.com",
+      "company": "Tcs",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:05:02.449Z",
+      "status": "sent"
+    },
+    {
+      "email": "hiring@dhan.ai",
+      "company": "Dhan",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:05:13.214Z",
+      "status": "sent"
+    },
+    {
+      "email": "globaltalentss@servicenow.com",
+      "company": "Servicenow",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:05:24.335Z",
+      "status": "sent"
+    },
+    {
+      "email": "reportfraud@spglobal.com",
+      "company": "Spglobal",
+      "subject": "Application for Fresher job Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:05:35.656Z",
+      "status": "sent"
+    },
+    {
+      "email": "hr@scalix.in",
+      "company": "Scalix",
+      "subject": "Application for Junior Business Analyst Position – Aman Ansari",
+      "sentAt": "2026-06-01T08:23:19.790Z",
+      "status": "sent"
+    }
+  ],
+  "uploadedResumePath": "C:\\Users\\amana\\Desktop\\finder\\uploads\\resume-ff5fdf30-36f5-4768-bdeb-bbc0a9bac4c1.pdf",
+  "uploadedResumeOriginalName": "python.pdf"
 }

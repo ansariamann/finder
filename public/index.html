@@ -43,11 +43,11 @@
         </div>
       </div>
       <nav class="header-nav">
-        <button class="nav-btn active" data-tab="search" id="nav-search">
+        <button class="nav-btn" data-tab="search" id="nav-search">
           <i data-lucide="search"></i>
           <span>Search</span>
         </button>
-        <button class="nav-btn" data-tab="outreach" id="nav-outreach">
+        <button class="nav-btn active" data-tab="outreach" id="nav-outreach">
           <i data-lucide="send"></i>
           <span>Outreach</span>
         </button>
@@ -67,7 +67,7 @@
   <main class="main">
 
     <!-- ──── TAB: SEARCH ──── -->
-    <section class="tab-panel active" id="panel-search">
+    <section class="tab-panel" id="panel-search">
       <!-- Search Card -->
       <div class="glass-card search-card" id="search-section">
         <div class="card-header">
@@ -151,37 +151,102 @@
       </div>
     </section>
 
-    <!-- ──── TAB: OUTREACH ──── -->
-    <section class="tab-panel" id="panel-outreach">
+    <section class="tab-panel active" id="panel-outreach">
+
+      <!-- ── BULK SEND BAR ── -->
+      <div class="glass-card bulk-send-card" id="bulk-send-card">
+        <div class="bulk-send-header">
+          <div class="card-icon-wrap accent" style="flex-shrink:0">
+            <i data-lucide="send"></i>
+          </div>
+          <div style="flex:1;min-width:0">
+            <h2>Bulk Email Sender</h2>
+            <p class="card-subtitle">Add company emails below — press <kbd>Enter</kbd> after each one, then fire them all at once</p>
+          </div>
+          <div class="bulk-send-meta" id="bulk-send-meta" style="display:none">
+            <span class="bulk-count-badge" id="bulk-count-badge">0 emails</span>
+          </div>
+        </div>
+
+        <!-- Tag Input -->
+        <div class="tag-input-wrap" id="tag-input-wrap">
+          <div class="tag-chips" id="tag-chips"></div>
+          <input
+            type="email"
+            id="tag-email-input"
+            class="tag-text-input"
+            placeholder="Type a company email and press Enter…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+
+        <!-- Position Row -->
+        <div class="position-row">
+          <div class="position-input-wrap">
+            <label for="bulk-position-input">
+              <i data-lucide="briefcase"></i>
+              Applying for
+            </label>
+            <input
+              type="text"
+              id="bulk-position-input"
+              placeholder="Software Developer"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <span class="position-default-hint">Leave blank to default to <strong>Software Developer</strong></span>
+        </div>
+
+        <div class="bulk-hint">
+          <i data-lucide="info"></i>
+          <span>Your resume (if uploaded) is attached automatically. Company name is inferred from the email domain.</span>
+        </div>
+
+        <!-- Action Row -->
+        <div class="bulk-actions-row">
+          <button class="btn btn-outline btn-sm" id="bulk-clear-btn" style="display:none">
+            <i data-lucide="trash-2"></i> Clear All
+          </button>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary bulk-fire-btn" id="bulk-send-btn" disabled>
+            <i data-lucide="send"></i>
+            <span id="bulk-send-label">Send All</span>
+          </button>
+        </div>
+
+        <!-- Progress -->
+        <div class="bulk-progress-wrap" id="bulk-progress-wrap" style="display:none">
+          <div class="bulk-progress-top">
+            <span id="bulk-prog-label">Sending…</span>
+            <span id="bulk-prog-pct">0%</span>
+          </div>
+          <div class="progress-bar-wrap" style="margin:10px 0 8px">
+            <div class="progress-bar" id="bulk-progress-bar" style="width:0%"></div>
+          </div>
+          <div class="progress-stats">
+            <span class="prog-stat sent"><i data-lucide="check"></i> Sent: <b id="bulk-prog-sent">0</b></span>
+            <span class="prog-stat failed"><i data-lucide="x"></i> Failed: <b id="bulk-prog-failed">0</b></span>
+            <span class="prog-stat total"><i data-lucide="mail"></i> Total: <b id="bulk-prog-total">0</b></span>
+          </div>
+          <div class="bulk-log" id="bulk-log"></div>
+        </div>
+      </div>
+
+      <!-- ── OUTREACH LAYOUT ── -->
       <div class="outreach-layout">
 
-        <!-- Left: Recipients -->
+        <!-- Left: Resume + Sent Log -->
         <div class="glass-card outreach-recipients">
           <div class="card-header">
             <div class="card-icon-wrap accent">
-              <i data-lucide="users"></i>
+              <i data-lucide="paperclip"></i>
             </div>
             <div>
-              <h2>Recipients</h2>
-              <p class="card-subtitle" id="recipient-count">0 contacts</p>
+              <h2>Resume &amp; Log</h2>
+              <p class="card-subtitle">Attach your resume and track sent emails</p>
             </div>
-          </div>
-
-          <!-- Manual Add Form -->
-          <div class="add-recipient-form">
-            <h4 class="form-section-title"><i data-lucide="user-plus"></i> Add Recipient Manually</h4>
-            <div class="input-group">
-              <input type="text" id="add-name" placeholder="HR Name (optional)" />
-            </div>
-            <div class="input-group">
-              <input type="email" id="add-email" placeholder="Email address *" required />
-            </div>
-            <div class="input-group">
-              <input type="text" id="add-company" placeholder="Company name *" required />
-            </div>
-            <button class="btn btn-accent btn-sm btn-full" id="add-recipient-btn">
-              <i data-lucide="plus"></i> Add to List
-            </button>
           </div>
 
           <!-- Resume Upload -->
@@ -205,23 +270,15 @@
             </div>
           </div>
 
-          <!-- Recipients List -->
-          <div class="recipients-list" id="recipients-list">
-            <div class="empty-recipients">
-              <i data-lucide="inbox"></i>
-              <p>No contacts yet</p>
-              <span>Add manually above or from job search results</span>
+          <!-- Sent Log -->
+          <div class="sent-log-section">
+            <h4 class="form-section-title"><i data-lucide="history"></i> Sent Log <span id="sent-log-count" class="sent-log-badge"></span></h4>
+            <div class="sent-log-list" id="sent-log-list">
+              <div class="empty-recipients" id="sent-log-empty">
+                <i data-lucide="inbox"></i>
+                <p>No emails sent yet</p>
+              </div>
             </div>
-          </div>
-
-          <!-- Bulk Actions -->
-          <div class="bulk-actions" id="bulk-actions" style="display: none;">
-            <button class="btn btn-outline btn-sm" id="clear-recipients-btn">
-              <i data-lucide="trash-2"></i> Clear All
-            </button>
-            <button class="btn btn-primary" id="send-all-btn">
-              <i data-lucide="send"></i> Send Individually (<span id="send-count">0</span>)
-            </button>
           </div>
         </div>
 
@@ -238,18 +295,6 @@
           </div>
 
           <div class="template-form">
-            <!-- Sender Info -->
-            <div class="template-row-2">
-              <div class="input-group">
-                <label for="sender-name-input">Your Name</label>
-                <input type="text" id="sender-name-input" placeholder="Your full name" />
-              </div>
-              <div class="input-group">
-                <label for="sender-phone-input">Your Phone</label>
-                <input type="text" id="sender-phone-input" placeholder="+91-XXXXXXXXXX" />
-              </div>
-            </div>
-
             <!-- Subject -->
             <div class="input-group">
               <label for="email-subject">Subject Line</label>
@@ -283,28 +328,6 @@
             </div>
           </div>
         </div>
-      </div>
-
-      <!-- Sending Progress -->
-      <div class="glass-card sending-progress" id="sending-progress" style="display: none;">
-        <div class="card-header">
-          <div class="card-icon-wrap green">
-            <i data-lucide="mail-check"></i>
-          </div>
-          <div>
-            <h2>Sending Emails</h2>
-            <p class="card-subtitle" id="progress-subtitle">Processing...</p>
-          </div>
-        </div>
-        <div class="progress-bar-wrap">
-          <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
-        </div>
-        <div class="progress-stats">
-          <span class="prog-stat sent"><i data-lucide="check"></i> Sent: <b id="prog-sent">0</b></span>
-          <span class="prog-stat failed"><i data-lucide="x"></i> Failed: <b id="prog-failed">0</b></span>
-          <span class="prog-stat total"><i data-lucide="mail"></i> Total: <b id="prog-total">0</b></span>
-        </div>
-        <div class="progress-log" id="progress-log"></div>
       </div>
     </section>
 
@@ -422,11 +445,11 @@
 
   <!-- Bottom Navigation Bar (mobile) -->
   <nav class="bottom-nav" id="bottom-nav">
-    <button class="bottom-nav-btn active" data-tab="search" id="bnav-search">
+    <button class="bottom-nav-btn" data-tab="search" id="bnav-search">
       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       Search
     </button>
-    <button class="bottom-nav-btn" data-tab="outreach" id="bnav-outreach">
+    <button class="bottom-nav-btn active" data-tab="outreach" id="bnav-outreach">
       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
       Outreach
     </button>
