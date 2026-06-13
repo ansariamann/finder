@@ -130,6 +130,16 @@ app.post('/api/search-jobs', async (req, res) => {
 
     console.log(`📊 Total raw results: ${allJobs.length}`);
 
+    // ── Filter: keep only fresher-friendly jobs (0–1 yr experience) ──
+    const beforeFilter = allJobs.length;
+    allJobs = allJobs.filter(isFresherFriendly);
+    console.log(`🎯 After fresher filter: ${allJobs.length} (removed ${beforeFilter - allJobs.length} senior/experienced roles)`);
+
+    // ── Filter: keep only jobs matching the searched city ──
+    const beforeLocationFilter = allJobs.length;
+    allJobs = allJobs.filter(job => isLocationMatch(job.location, city));
+    console.log(`📍 After location filter: ${allJobs.length} (removed ${beforeLocationFilter - allJobs.length} jobs from other locations)`);
+
     // Deduplicate by apply-link then by company+title combo
     const seenLinks = new Set();
     const seenKeys  = new Set();
@@ -628,6 +638,131 @@ function extractEmailFromDescription(text) {
 }
 
 /**
+ * Check if a job's location matches the searched city.
+ * - Exact or partial match on city name (case-insensitive).
+ * - Also allows "Remote", "India", "Anywhere", "Work from home" through.
+ * - Handles common variations like "Bengaluru" / "Bangalore".
+ */
+function isLocationMatch(jobLocation, searchedCity) {
+  if (!jobLocation || !searchedCity) return true; // no data → keep
+
+  const loc  = jobLocation.toLowerCase().trim();
+  const city = searchedCity.toLowerCase().trim();
+
+  // Always allow remote / nationwide / unspecified
+  if (/\b(remote|anywhere|worldwide|global|india|work\s*from\s*home|wfh|pan\s*india|multiple|various)\b/.test(loc)) {
+    return true;
+  }
+
+  // Direct substring match (covers "Mumbai, Maharashtra" matching "Mumbai")
+  if (loc.includes(city) || city.includes(loc)) return true;
+
+  // Common Indian city aliases
+  const cityAliases = {
+    'bangalore':  ['bengaluru', 'blr', 'bangalore'],
+    'bengaluru':  ['bangalore', 'blr', 'bengaluru'],
+    'mumbai':     ['bombay', 'mumbai'],
+    'bombay':     ['mumbai', 'bombay'],
+    'chennai':    ['madras', 'chennai'],
+    'madras':     ['chennai', 'madras'],
+    'kolkata':    ['calcutta', 'kolkata'],
+    'calcutta':   ['kolkata', 'calcutta'],
+    'delhi':      ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad'],
+    'ncr':        ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram'],
+    'noida':      ['ncr', 'delhi', 'noida'],
+    'gurgaon':    ['gurugram', 'gurgaon', 'ncr', 'delhi'],
+    'gurugram':   ['gurgaon', 'gurugram', 'ncr', 'delhi'],
+    'hyderabad':  ['hyderabad', 'hyd'],
+    'pune':       ['pune', 'puna'],
+    'ahmedabad':  ['ahmedabad', 'amdavad'],
+    'thiruvananthapuram': ['trivandrum', 'thiruvananthapuram'],
+    'trivandrum': ['thiruvananthapuram', 'trivandrum'],
+    'kochi':      ['cochin', 'kochi'],
+    'cochin':     ['kochi', 'cochin'],
+    'vizag':      ['visakhapatnam', 'vizag'],
+    'visakhapatnam': ['vizag', 'visakhapatnam'],
+  };
+
+  const aliases = cityAliases[city] || [];
+  for (const alias of aliases) {
+    if (loc.includes(alias)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Filter jobs to only those suitable for freshers (0–1 year experience).
+ * Strategy:
+ *   1. If the title or description explicitly mentions 2+ years required → REJECT.
+ *   2. If the title or description says "fresher", "entry level", "0-1", "graduate",
+ *      "trainee", "intern", "junior", or no experience mentioned → KEEP.
+ */
+function isFresherFriendly(job) {
+  const text = `${job.title || ''} ${job.description || ''}`.toLowerCase();
+
+  // ── REJECT patterns: explicit 2+ years requirement ──
+  // Matches patterns like "2+ years", "3-5 years", "5 years", "minimum 2 years", etc.
+  const rejectPatterns = [
+    /\b([2-9]|[1-9]\d)\+?\s*(?:to|-|–)?\s*\d*\s*(?:years?|yrs?)\b/,           // "2+ years", "3-5 years", "5 years"
+    /\b(?:minimum|min|at\s*least)\s*(?:of\s+)?([2-9]|[1-9]\d)\s*(?:years?|yrs?)\b/, // "minimum 2 years"
+    /\bexperience\s*(?:of\s+)?([2-9]|[1-9]\d)\s*(?:years?|yrs?)\b/,            // "experience of 3 years"
+    /\b([2-9]|[1-9]\d)\s*(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp)\b/,    // "3 years of experience"
+    /\bsenior\b/,                                                               // "Senior" roles
+    /\blead\b/,                                                                 // "Lead" roles
+    /\bstaff\b/,                                                                // "Staff" roles
+    /\bprincipal\b/,                                                            // "Principal" roles
+    /\barchitect\b/,                                                            // "Architect" roles
+    /\bdirector\b/,                                                             // "Director" roles
+    /\bmanager\b.*\bengineering\b/,                                             // "Engineering Manager"
+    /\bvp\b/,                                                                   // VP roles
+  ];
+
+  for (const pat of rejectPatterns) {
+    if (pat.test(text)) {
+      // Exception: if job title itself says "fresher" or "entry" or "junior", keep it
+      const title = (job.title || '').toLowerCase();
+      if (/fresher|entry.?level|junior|trainee|intern|graduate|apprentice/i.test(title)) {
+        return true;
+      }
+      return false;
+    }
+  }
+
+  // ── ACCEPT patterns: explicitly fresher-friendly ──
+  const acceptPatterns = [
+    /\bfresher/,
+    /\bentry[\s-]?level/,
+    /\bjunior\b/,
+    /\btrainee\b/,
+    /\bintern\b/,
+    /\bgraduate\b/,
+    /\bapprentice\b/,
+    /\b0\s*(?:to|-|–)\s*1\s*(?:years?|yrs?)\b/,   // "0-1 years"
+    /\b0\s*(?:to|-|–)\s*2\s*(?:years?|yrs?)\b/,   // "0-2 years" (still fresher-friendly)
+    /\b1\s*(?:to|-|–)\s*2\s*(?:years?|yrs?)\b/,   // "1-2 years" (still ok for freshers)
+    /\bno\s+(?:prior\s+)?experience\s+(?:required|needed|necessary)\b/,
+    /\b(?:0|zero|nil)\s*(?:years?|yrs?)\s*(?:experience|exp)\b/,
+    /\b1\s*(?:years?|yrs?)\s*(?:experience|exp)\b/, // "1 year experience"
+    /\bexperience\s*(?::|-)\s*(?:0|1)\b/,
+  ];
+
+  for (const pat of acceptPatterns) {
+    if (pat.test(text)) return true;
+  }
+
+  // No experience mentioned at all → assume it could be fresher-friendly, KEEP
+  const mentionsExperience = /\b(?:experience|years?|yrs?)\b/.test(text);
+  if (!mentionsExperience) return true;
+
+  // Mentions experience but no specific number → keep (benefit of the doubt)
+  const mentionsSpecificYears = /\b\d+\s*\+?\s*(?:years?|yrs?)\b/.test(text);
+  if (!mentionsSpecificYears) return true;
+
+  return false;
+}
+
+/**
  * Build a normalised job object from raw JSearch data
  */
 function mapJSearchJob(job, city) {
@@ -661,8 +796,9 @@ async function jsearchQuery(query, page, numPages = '3') {
       query,
       page: String(page),
       num_pages: numPages,
-      date_posted: 'month',           // broad window — more results
+      date_posted: 'month',
       employment_types: 'FULLTIME,PARTTIME,INTERN,CONTRACTOR',
+      job_requirements: 'no_experience,under_3_years_experience,no_degree',
     },
     headers: {
       'x-rapidapi-key': process.env.RAPIDAPI_KEY,
@@ -675,23 +811,26 @@ async function jsearchQuery(query, page, numPages = '3') {
 
 /**
  * Fetch jobs from JSearch API using MULTIPLE keyword variations in parallel.
- * One RapidAPI key, up to 5 queries × 3 pages = ~150 raw results.
+ * Optimised for fresher / 0–1 year experience roles.
  */
 async function fetchJSearchJobs(city, keywords, page) {
   if (!process.env.RAPIDAPI_KEY || process.env.RAPIDAPI_KEY === 'your-rapidapi-key-here') {
     return [];
   }
 
-  // Build varied search queries for maximum coverage
+  // Build varied search queries targeting 0–1 year / fresher roles
   const baseKeyword = keywords.trim();
   const queries = [
     `${baseKeyword} jobs in ${city}`,
     `fresher developer jobs in ${city}`,
+    `fresher software engineer jobs in ${city}`,
     `junior software engineer jobs in ${city}`,
-    `entry level programmer jobs in ${city}`,
+    `entry level developer jobs in ${city}`,
+    `0-1 years experience developer ${city}`,
     `software trainee jobs in ${city}`,
     `graduate software engineer ${city}`,
-    `0 year experience software developer ${city}`,
+    `fresher IT jobs in ${city}`,
+    `intern developer jobs in ${city}`,
   ];
 
   // Run all queries in parallel (fire-and-forget errors)
@@ -723,7 +862,7 @@ async function fetchAdzunaJobs(city, keywords, page) {
         params: {
           app_id: appId,
           app_key: appKey,
-          what: `${keywords} fresher junior`,
+          what: `${keywords} fresher junior entry level trainee 0-1 years`,
           where: city,
           results_per_page: 50,
           max_days_old: 30,
