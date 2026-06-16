@@ -168,25 +168,25 @@
           </div>
         </div>
 
-        <!-- Tag Input -->
-        <div class="tag-input-wrap" id="tag-input-wrap">
-          <div class="tag-chips" id="tag-chips"></div>
-          <input
-            type="email"
-            id="tag-email-input"
-            class="tag-text-input"
-            placeholder="Type a company email and press Enter…"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </div>
-
-        <!-- Position Row -->
-        <div class="position-row">
-          <div class="position-input-wrap">
+        <!-- Tag Input Row (email + position inline) -->
+        <div class="bulk-add-row">
+          <div class="bulk-add-field email-field">
+            <label for="tag-email-input">
+              <i data-lucide="mail"></i>
+              Email
+            </label>
+            <input
+              type="email"
+              id="tag-email-input"
+              placeholder="hr@company.com"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <div class="bulk-add-field position-field">
             <label for="bulk-position-input">
               <i data-lucide="briefcase"></i>
-              Applying for
+              Position
             </label>
             <input
               type="text"
@@ -196,7 +196,17 @@
               autocomplete="off"
             />
           </div>
-          <span class="position-default-hint">Leave blank to default to <strong>Software Developer</strong></span>
+          <button class="btn btn-accent btn-add-chip" id="add-chip-btn" title="Add to list">
+            <i data-lucide="plus"></i>
+          </button>
+        </div>
+        <p class="bulk-add-hint">
+          Press <kbd>Enter</kbd> to add. Leave position blank to default to <strong>Software Developer</strong>.
+        </p>
+
+        <!-- Chips (email + position pairs) -->
+        <div class="tag-chips-wrap" id="tag-chips-wrap" style="display:none">
+          <div class="tag-chips" id="tag-chips"></div>
         </div>
 
         <div class="bulk-hint">
@@ -314,7 +324,7 @@
 
             <!-- Simple editable body -->
             <div class="input-group">
-              <label for="template-body">Email Body <small>(plain text, editable)</small></label>
+              <label for="template-body">Email Body <small>(plain text — HTML styling is added automatically when sending)</small></label>
               <textarea id="template-body" class="template-textarea" rows="14" placeholder="Write your email here..."></textarea>
             </div>
 

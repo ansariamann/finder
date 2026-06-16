@@ -678,25 +678,28 @@ kbd{
 
 /* Email chips */
 .email-chip{
-  display:inline-flex;align-items:center;gap:7px;
-  padding:5px 12px 5px 14px;
+  display:inline-flex;align-items:center;gap:9px;
+  padding:7px 12px 7px 14px;
   background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(56,189,248,.08));
   border:1px solid rgba(139,92,246,.2);
-  border-radius:var(--radius-pill);
+  border-radius:var(--radius-sm);
   font-size:.76rem;font-family:var(--mono);color:var(--text);
   animation:chipPop .25s cubic-bezier(.4,0,.2,1);
-  white-space:nowrap;max-width:300px;
+  max-width:340px;
 }
-.email-chip span{overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.chip-content{display:flex;flex-direction:column;gap:1px;overflow:hidden;min-width:0}
+.chip-email{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;font-weight:500}
+.chip-position{font-size:.65rem;color:var(--primary-light);font-family:var(--font);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
 .chip-remove{
   display:flex;align-items:center;justify-content:center;
-  width:17px;height:17px;border-radius:50%;
+  width:19px;height:19px;border-radius:50%;
   background:rgba(255,255,255,0.08);border:none;
-  color:var(--text-dim);cursor:pointer;font-size:10px;
+  color:var(--text-dim);cursor:pointer;font-size:11px;
   flex-shrink:0;transition:all .2s;padding:0;line-height:1;
 }
 .chip-remove:hover{background:rgba(248,113,113,.25);color:var(--red)}
 @keyframes chipPop{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+
 
 /* Bulk hint */
 .bulk-hint{
@@ -744,18 +747,26 @@ kbd{
 @keyframes retryPulse{0%,100%{opacity:1}50%{opacity:.7}}
 @keyframes retryDotPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.65}}
 
-/* ═══════════════════ POSITION ROW ═══════════════════ */
-.position-row{display:flex;align-items:center;gap:16px;margin-bottom:14px;flex-wrap:wrap}
-.position-input-wrap{
-  display:flex;align-items:center;gap:8px;flex:1;min-width:200px;
+/* ═══════════════════ BULK ADD ROW (email + position inline) ═══════════════════ */
+.bulk-add-row{display:flex;align-items:flex-end;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.bulk-add-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px}
+.bulk-add-field.email-field{flex:1.5}
+.bulk-add-field label{display:flex;align-items:center;gap:6px;font-size:.73rem;font-weight:600;color:var(--text-dim);letter-spacing:.02em;cursor:default}
+.bulk-add-field label svg{width:13px;height:13px;color:var(--primary-light)}
+.bulk-add-field input{
+  width:100%;padding:11px 14px;
   background:var(--surface-2);border:1px solid var(--border);
-  border-radius:var(--radius-sm);padding:9px 16px;
-  transition:border-color .25s,box-shadow .25s;
+  border-radius:var(--radius-sm);color:var(--text);font-size:.86rem;
+  outline:none;transition:border-color .25s,box-shadow .25s;
 }
-.position-input-wrap:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
-.position-input-wrap label{display:flex;align-items:center;gap:7px;font-size:.76rem;font-weight:600;color:var(--text-dim);white-space:nowrap;cursor:default}
-.position-input-wrap label svg{width:14px;height:14px;color:var(--primary-light)}
-.position-input-wrap input{flex:1;border:none;background:transparent;color:var(--text);font-size:.86rem;font-weight:600;outline:none;padding:0;min-width:120px}
-.position-input-wrap input::placeholder{color:var(--text-muted);font-weight:400}
-.position-default-hint{font-size:.7rem;color:var(--text-muted);white-space:nowrap}
-.position-default-hint strong{color:var(--text-dim)}
+.bulk-add-field input::placeholder{color:var(--text-muted)}
+.bulk-add-field input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow);background:var(--surface-3)}
+.btn-add-chip{width:44px;height:44px;padding:0!important;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm)!important}
+.btn-add-chip svg{width:18px;height:18px}
+.bulk-add-hint{font-size:.7rem;color:var(--text-muted);margin-bottom:14px;line-height:1.55}
+.bulk-add-hint strong{color:var(--text-dim)}
+
+/* Tag chips wrap */
+.tag-chips-wrap{margin-bottom:14px}
+.tag-chips{display:flex;flex-wrap:wrap;gap:8px}
+

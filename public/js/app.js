@@ -268,11 +268,11 @@
           toast('info', 'No selected jobs have email addresses.');
           return;
         }
-        // Add all emails to the bulk list
+        // Add all emails to the bulk list with their position from job title
         let added = 0;
         jobsWithEmail.forEach(j => {
-          if (!bulkEmails.includes(j.email.toLowerCase())) {
-            bulkEmails.push(j.email.toLowerCase());
+          if (!bulkEntries.some(e => e.email === j.email.toLowerCase())) {
+            bulkEntries.push({ email: j.email.toLowerCase(), position: j.title || 'Software Developer' });
             added++;
           }
         });
@@ -324,8 +324,8 @@
   //  BULK SEND — Tag-input multi-email system
   // ══════════════════════════════════════════════════
 
-  // Holds all queued email addresses (deduped)
-  const bulkEmails = [];
+  // Holds all queued entries as {email, position} objects (deduped by email)
+  const bulkEntries = [];
 
   function setupBulkSend() {
     if (!dom.tagEmailInput) return;
@@ -335,28 +335,57 @@
       dom.tagInputWrap.addEventListener('click', () => dom.tagEmailInput.focus());
     }
 
+    // Helper to read inputs and add entry
+    function addCurrentEntry() {
+      const emailVal = dom.tagEmailInput.value.trim();
+      const posVal = (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) || '';
+      if (emailVal) {
+        addChip(emailVal, posVal || 'Software Developer');
+      }
+    }
+
     dom.tagEmailInput.addEventListener('keydown', (e) => {
       const val = dom.tagEmailInput.value.trim();
 
       // Enter or comma → add chip
       if (e.key === 'Enter' || e.key === ',') {
         e.preventDefault();
-        if (val) addChip(val);
+        addCurrentEntry();
         return;
       }
 
-      // Backspace on empty input → remove last chip
-      if (e.key === 'Backspace' && !val && bulkEmails.length > 0) {
-        removeChip(bulkEmails[bulkEmails.length - 1]);
+      // Backspace on empty input → remove last entry
+      if (e.key === 'Backspace' && !val && bulkEntries.length > 0) {
+        removeChip(bulkEntries[bulkEntries.length - 1].email);
       }
     });
+
+    // Also allow Enter from position field
+    if (dom.bulkPositionInput) {
+      dom.bulkPositionInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addCurrentEntry();
+        }
+      });
+    }
+
+    // Add button (+)
+    const addChipBtn = $('#add-chip-btn');
+    if (addChipBtn) {
+      addChipBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        addCurrentEntry();
+      });
+    }
 
     // Also handle paste — split by comma/newline/semicolon and add all
     dom.tagEmailInput.addEventListener('paste', (e) => {
       e.preventDefault();
       const pasted = (e.clipboardData || window.clipboardData).getData('text');
+      const posVal = (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) || 'Software Developer';
       const parts = pasted.split(/[,;\n\r]+/);
-      parts.forEach(p => { const t = p.trim(); if (t) addChip(t); });
+      parts.forEach(p => { const t = p.trim(); if (t) addChip(t, posVal); });
     });
 
     // Send All button
@@ -367,7 +396,7 @@
     // Clear All
     if (dom.bulkClearBtn) {
       dom.bulkClearBtn.addEventListener('click', () => {
-        bulkEmails.length = 0;
+        bulkEntries.length = 0;
         renderChips();
         updateBulkMeta();
       });
@@ -378,47 +407,62 @@
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  function addChip(email) {
-    if (!isValidEmail(email)) {
+  function addChip(email, position) {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanPos = (position || 'Software Developer').trim();
+    if (!isValidEmail(cleanEmail)) {
       toast('error', `"${email}" doesn't look like a valid email.`);
       return;
     }
-    if (bulkEmails.includes(email.toLowerCase())) {
+    if (bulkEntries.some(e => e.email === cleanEmail)) {
       toast('info', `${email} is already in the list.`);
       dom.tagEmailInput.value = '';
       return;
     }
-    bulkEmails.push(email.toLowerCase());
+    bulkEntries.push({ email: cleanEmail, position: cleanPos });
     dom.tagEmailInput.value = '';
+    if (dom.bulkPositionInput) dom.bulkPositionInput.value = '';
+    dom.tagEmailInput.focus();
     renderChips();
     updateBulkMeta();
   }
 
   function removeChip(email) {
-    const idx = bulkEmails.indexOf(email);
-    if (idx !== -1) bulkEmails.splice(idx, 1);
+    const idx = bulkEntries.findIndex(e => e.email === email);
+    if (idx !== -1) bulkEntries.splice(idx, 1);
     renderChips();
     updateBulkMeta();
   }
 
   function renderChips() {
     if (!dom.tagChips) return;
+    const wrap = $('#tag-chips-wrap');
     dom.tagChips.innerHTML = '';
-    bulkEmails.forEach(email => {
+    if (bulkEntries.length === 0) {
+      if (wrap) wrap.style.display = 'none';
+      return;
+    }
+    if (wrap) wrap.style.display = 'block';
+    bulkEntries.forEach(entry => {
       const chip = document.createElement('div');
       chip.className = 'email-chip';
-      chip.title = email;
-      chip.innerHTML = `<span>${esc(email)}</span><button class="chip-remove" aria-label="Remove">&times;</button>`;
+      chip.title = `${entry.email} — ${entry.position}`;
+      chip.innerHTML = `
+        <div class="chip-content">
+          <span class="chip-email">${esc(entry.email)}</span>
+          <span class="chip-position">${esc(entry.position)}</span>
+        </div>
+        <button class="chip-remove" aria-label="Remove">&times;</button>`;
       chip.querySelector('.chip-remove').addEventListener('click', (e) => {
         e.stopPropagation();
-        removeChip(email);
+        removeChip(entry.email);
       });
       dom.tagChips.appendChild(chip);
     });
   }
 
   function updateBulkMeta() {
-    const n = bulkEmails.length;
+    const n = bulkEntries.length;
     if (dom.bulkSendBtn) dom.bulkSendBtn.disabled = n === 0;
     if (dom.bulkClearBtn) dom.bulkClearBtn.style.display = n > 0 ? '' : 'none';
     if (dom.bulkSendMeta) dom.bulkSendMeta.style.display = n > 0 ? '' : 'none';
@@ -442,16 +486,20 @@
   }
 
   async function startBulkSend() {
-    if (bulkEmails.length === 0) return;
+    if (bulkEntries.length === 0) return;
 
-    const total = bulkEmails.length;
-    const position = (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) || 'Software Developer';
+    const total = bulkEntries.length;
+    // Snapshot the entries to send (clone so clearing doesn't affect in-progress)
+    const toSend = bulkEntries.map(e => ({ ...e }));
     let sent = 0, failed = 0;
 
     // Lock UI
     if (dom.bulkSendBtn) { dom.bulkSendBtn.disabled = true; dom.bulkSendLabel.textContent = 'Sending…'; }
     if (dom.tagEmailInput) dom.tagEmailInput.disabled = true;
+    if (dom.bulkPositionInput) dom.bulkPositionInput.disabled = true;
     if (dom.bulkClearBtn) dom.bulkClearBtn.disabled = true;
+    const addChipBtn = $('#add-chip-btn');
+    if (addChipBtn) addChipBtn.disabled = true;
 
     // Show progress section
     if (dom.bulkProgressWrap) dom.bulkProgressWrap.style.display = 'block';
@@ -466,12 +514,12 @@
     // Track log entry elements for retry updates
     const logEntries = new Map();
 
-    // Send emails sequentially
-    for (let i = 0; i < bulkEmails.length; i++) {
-      const email = bulkEmails[i];
+    // Send emails sequentially — each with its own position
+    for (let i = 0; i < toSend.length; i++) {
+      const { email, position } = toSend[i];
       const companyName = deriveName(email);
 
-      if (dom.bulkProgLabel) dom.bulkProgLabel.textContent = `Sending ${i + 1} of ${total} — ${companyName}…`;
+      if (dom.bulkProgLabel) dom.bulkProgLabel.textContent = `Sending ${i + 1} of ${total} — ${companyName} (${position})…`;
 
       let ok = false;
       let errMsg = '';
@@ -568,7 +616,7 @@
       lucide.createIcons();
 
       // Delay between emails (rate limiting)
-      if (i < bulkEmails.length - 1) {
+      if (i < toSend.length - 1) {
         await new Promise(r => setTimeout(r, 3200));
       }
     }
@@ -577,19 +625,21 @@
     if (dom.bulkProgLabel) dom.bulkProgLabel.textContent = `✅ Done! ${sent} sent, ${failed} failed.`;
     toast(failed === 0 ? 'success' : 'info', `Bulk send complete: ${sent} sent, ${failed} failed.`);
 
-    // Clear the chips & reset UI
-    bulkEmails.length = 0;
+    // Clear the entries & reset UI
+    bulkEntries.length = 0;
     renderChips();
     updateBulkMeta();
 
     if (dom.tagEmailInput) dom.tagEmailInput.disabled = false;
+    if (dom.bulkPositionInput) dom.bulkPositionInput.disabled = false;
     if (dom.bulkClearBtn) { dom.bulkClearBtn.disabled = false; }
+    if (addChipBtn) addChipBtn.disabled = false;
   }
 
   // Keep clicking a job with email → adds to bulk list instead of old quick-send
   function prefillBulkEmail(email) {
     if (!email) return;
-    addChip(email);
+    addChip(email, 'Software Developer');
     // Switch to outreach tab
     $$('.nav-btn').forEach(b => b.classList.remove('active'));
     $('#nav-outreach').classList.add('active');
