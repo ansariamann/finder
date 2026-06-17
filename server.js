@@ -82,6 +82,10 @@ let sentEmailsLog = stored.sentEmailsLog;
 let uploadedResumePath = stored.uploadedResumePath;
 let uploadedResumeOriginalName = stored.uploadedResumeOriginalName;
 
+// Cache full search results so pagination returns consistent pages
+const searchResultCache = new Map();
+const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
+
 // ─── SMTP Transporter ────────────────────────────────────────
 function createTransporter() {
   return nodemailer.createTransport({
@@ -109,55 +113,72 @@ app.post('/api/search-jobs', async (req, res) => {
       return res.status(400).json({ error: 'City is required' });
     }
 
-    console.log(`\n🔍 Searching jobs: "${keywords}" in "${city}" (page ${page})`);
+    const cacheKey = `${city.toLowerCase().trim()}|${keywords.toLowerCase().trim()}`;
+    const cached = searchResultCache.get(cacheKey);
+    let uniqueJobs;
 
-    // Run ALL sources in parallel for maximum coverage
-    const [jsearchJobs, adzunaJobs, remotiveJobs, museJobs, arbeitnowJobs] = await Promise.allSettled([
-      fetchJSearchJobs(city, keywords, page),
-      fetchAdzunaJobs(city, keywords, page),
-      fetchRemotiveJobs(keywords),
-      fetchTheMuseJobs(keywords, page),
-      fetchArbeitnowJobs(keywords, page)
-    ]);
+    if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL_MS) {
+      uniqueJobs = cached.jobs;
+      console.log(`\n🔍 Cache hit: "${keywords}" in "${city}" (page ${page}, ${uniqueJobs.length} cached)`);
+    } else {
+      console.log(`\n🔍 Searching jobs: "${keywords}" in "${city}" (page ${page})`);
 
-    let allJobs = [
-      ...(jsearchJobs.status  === 'fulfilled' ? jsearchJobs.value  : []),
-      ...(adzunaJobs.status   === 'fulfilled' ? adzunaJobs.value   : []),
-      ...(remotiveJobs.status === 'fulfilled' ? remotiveJobs.value : []),
-      ...(museJobs.status     === 'fulfilled' ? museJobs.value     : []),
-      ...(arbeitnowJobs.status=== 'fulfilled' ? arbeitnowJobs.value: []),
-    ];
+      // City searches rely on location-aware APIs; global boards add remote noise
+      const [jsearchJobs, adzunaJobs] = await Promise.allSettled([
+        fetchJSearchJobs(city, keywords),
+        fetchAdzunaJobs(city, keywords, 1)
+      ]);
 
-    console.log(`📊 Total raw results: ${allJobs.length}`);
+      let allJobs = [
+        ...(jsearchJobs.status === 'fulfilled' ? jsearchJobs.value : []),
+        ...(adzunaJobs.status  === 'fulfilled' ? adzunaJobs.value  : []),
+      ];
 
-    // ── Filter: keep only fresher-friendly jobs (0–1 yr experience) ──
-    const beforeFilter = allJobs.length;
-    allJobs = allJobs.filter(isFresherFriendly);
-    console.log(`🎯 After fresher filter: ${allJobs.length} (removed ${beforeFilter - allJobs.length} senior/experienced roles)`);
+      console.log(`📊 Total raw results: ${allJobs.length}`);
 
-    // ── Filter: keep only jobs matching the searched city ──
-    const beforeLocationFilter = allJobs.length;
-    allJobs = allJobs.filter(job => isLocationMatch(job.location, city));
-    console.log(`📍 After location filter: ${allJobs.length} (removed ${beforeLocationFilter - allJobs.length} jobs from other locations)`);
+      const beforeJunk = allJobs.length;
+      allJobs = allJobs.filter(job => !isJunkListing(job));
+      if (beforeJunk !== allJobs.length) {
+        console.log(`🗑️  After junk filter: ${allJobs.length} (removed ${beforeJunk - allJobs.length} spam listings)`);
+      }
 
-    // Deduplicate by apply-link then by company+title combo
-    const seenLinks = new Set();
-    const seenKeys  = new Set();
-    const uniqueJobs = [];
-    for (const job of allJobs) {
-      const linkKey  = (job.applyLink || '').toLowerCase().trim();
-      const comboKey = `${job.company}|${job.title}`.toLowerCase().trim();
-      if (linkKey && linkKey !== '#' && seenLinks.has(linkKey)) continue;
-      if (seenKeys.has(comboKey)) continue;
-      if (linkKey && linkKey !== '#') seenLinks.add(linkKey);
-      seenKeys.add(comboKey);
-      uniqueJobs.push(job);
+      const beforeFilter = allJobs.length;
+      allJobs = allJobs.filter(isFresherFriendly);
+      console.log(`🎯 After fresher filter: ${allJobs.length} (removed ${beforeFilter - allJobs.length} senior/experienced roles)`);
+
+      const beforeKeyword = allJobs.length;
+      allJobs = allJobs.filter(job => matchesKeywords(job, keywords));
+      if (beforeKeyword !== allJobs.length) {
+        console.log(`🔎 After keyword filter: ${allJobs.length} (removed ${beforeKeyword - allJobs.length} unrelated roles)`);
+      }
+
+      const beforeLocationFilter = allJobs.length;
+      allJobs = allJobs.filter(job => isLocationMatch(job.location, city));
+      console.log(`📍 After location filter: ${allJobs.length} (removed ${beforeLocationFilter - allJobs.length} jobs from other locations)`);
+
+      const seenLinks = new Set();
+      const seenKeys  = new Set();
+      uniqueJobs = [];
+      for (const job of allJobs) {
+        const linkKey  = (job.applyLink || '').toLowerCase().trim();
+        const comboKey = `${job.company}|${job.title}`.toLowerCase().trim();
+        if (linkKey && linkKey !== '#' && seenLinks.has(linkKey)) continue;
+        if (seenKeys.has(comboKey)) continue;
+        if (linkKey && linkKey !== '#') seenLinks.add(linkKey);
+        seenKeys.add(comboKey);
+        uniqueJobs.push(sanitizeJobForClient(job));
+      }
+
+      uniqueJobs.sort((a, b) => new Date(b.posted) - new Date(a.posted));
+      searchResultCache.set(cacheKey, { jobs: uniqueJobs, timestamp: Date.now() });
+
+      if (uniqueJobs.length === 0) {
+        const hasJSearch = process.env.RAPIDAPI_KEY && process.env.RAPIDAPI_KEY !== 'your-rapidapi-key-here';
+        const hasAdzuna  = process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_ID !== 'your-adzuna-app-id';
+        console.log(`⚠️  No jobs found. JSearch: ${hasJSearch ? 'OK' : 'missing key'}, Adzuna: ${hasAdzuna ? 'OK' : 'missing key'}`);
+      }
     }
 
-    // Sort: newest first
-    uniqueJobs.sort((a, b) => new Date(b.posted) - new Date(a.posted));
-
-    // Paginate (30 per page)
     const pageSize = 30;
     const startIdx = (page - 1) * pageSize;
     const pageJobs = uniqueJobs.slice(startIdx, startIdx + pageSize);
@@ -169,7 +190,8 @@ app.post('/api/search-jobs', async (req, res) => {
       query: `${keywords} jobs in ${city}`,
       total: pageJobs.length,
       totalAvailable: uniqueJobs.length,
-      jobs: pageJobs
+      jobs: pageJobs,
+      hasMore: startIdx + pageJobs.length < uniqueJobs.length
     });
 
   } catch (error) {
@@ -605,6 +627,7 @@ function buildApplicationEmail({ company, hrName, position, name, phone, email }
  */
 app.post('/api/clear-history', (req, res) => {
   searchHistory = [];
+  searchResultCache.clear();
   saveData();
   res.json({ success: true, message: 'Search history cleared' });
 });
@@ -639,26 +662,41 @@ function extractEmailFromDescription(text) {
 
 /**
  * Check if a job's location matches the searched city.
- * - Exact or partial match on city name (case-insensitive).
- * - Also allows "Remote", "India", "Anywhere", "Work from home" through.
- * - Handles common variations like "Bengaluru" / "Bangalore".
+ * Strict matching: remote/worldwide jobs only pass if they also mention the city.
  */
 function isLocationMatch(jobLocation, searchedCity) {
-  if (!jobLocation || !searchedCity) return true; // no data → keep
+  if (!searchedCity) return true;
+  if (!jobLocation) return false;
 
   const loc  = jobLocation.toLowerCase().trim();
   const city = searchedCity.toLowerCase().trim();
 
-  // Always allow remote / nationwide / unspecified
-  if (/\b(remote|anywhere|worldwide|global|india|work\s*from\s*home|wfh|pan\s*india|multiple|various)\b/.test(loc)) {
-    return true;
+  const cityAliases = getCityAliases();
+  const aliases = cityAliases[city] || [city];
+  const matchesCity = aliases.some(alias => loc.includes(alias));
+
+  if (matchesCity) return true;
+
+  // WFH / hybrid only counts if the listing also names the searched city
+  if (/\b(remote|work\s*from\s*home|wfh|hybrid)\b/.test(loc)) {
+    return false;
   }
 
-  // Direct substring match (covers "Mumbai, Maharashtra" matching "Mumbai")
-  if (loc.includes(city) || city.includes(loc)) return true;
+  // Reject broad / foreign locations that aren't the searched city
+  if (/\b(worldwide|anywhere|global|usa|united states|uk|europe|canada|australia)\b/.test(loc)) {
+    return false;
+  }
 
-  // Common Indian city aliases
-  const cityAliases = {
+  // "India" alone is too broad for a city-specific search
+  if (/\bindia\b/.test(loc) && !matchesCity) {
+    return false;
+  }
+
+  return false;
+}
+
+function getCityAliases() {
+  return {
     'bangalore':  ['bengaluru', 'blr', 'bangalore'],
     'bengaluru':  ['bangalore', 'blr', 'bengaluru'],
     'mumbai':     ['bombay', 'mumbai'],
@@ -668,27 +706,69 @@ function isLocationMatch(jobLocation, searchedCity) {
     'kolkata':    ['calcutta', 'kolkata'],
     'calcutta':   ['kolkata', 'calcutta'],
     'delhi':      ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad'],
-    'ncr':        ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram'],
-    'noida':      ['ncr', 'delhi', 'noida'],
+    'new delhi':  ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram'],
+    'ncr':        ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad'],
+    'noida':      ['ncr', 'delhi', 'noida', 'greater noida'],
     'gurgaon':    ['gurugram', 'gurgaon', 'ncr', 'delhi'],
     'gurugram':   ['gurgaon', 'gurugram', 'ncr', 'delhi'],
-    'hyderabad':  ['hyderabad', 'hyd'],
-    'pune':       ['pune', 'puna'],
+    'hyderabad':  ['hyderabad', 'hyd', 'secunderabad'],
+    'secunderabad': ['hyderabad', 'secunderabad'],
+    'pune':       ['pune', 'puna', 'hinjewadi', 'hinjewadi phase', 'kharadi', 'viman nagar', 'wakad', 'baner'],
     'ahmedabad':  ['ahmedabad', 'amdavad'],
+    'indore':     ['indore'],
+    'lucknow':    ['lucknow'],
+    'nagpur':     ['nagpur'],
+    'jaipur':     ['jaipur'],
+    'chandigarh': ['chandigarh', 'mohali', 'panchkula'],
+    'coimbatore': ['coimbatore'],
+    'kochi':      ['cochin', 'kochi', 'ernakulam'],
+    'cochin':     ['kochi', 'cochin', 'ernakulam'],
     'thiruvananthapuram': ['trivandrum', 'thiruvananthapuram'],
     'trivandrum': ['thiruvananthapuram', 'trivandrum'],
-    'kochi':      ['cochin', 'kochi'],
-    'cochin':     ['kochi', 'cochin'],
     'vizag':      ['visakhapatnam', 'vizag'],
     'visakhapatnam': ['vizag', 'visakhapatnam'],
+    'bhopal':     ['bhopal'],
+    'surat':      ['surat'],
+    'vadodara':   ['vadodara', 'baroda'],
+    'baroda':     ['vadodara', 'baroda'],
+    'mysore':     ['mysore', 'mysuru'],
+    'mysuru':     ['mysore', 'mysuru'],
   };
+}
 
-  const aliases = cityAliases[city] || [];
-  for (const alias of aliases) {
-    if (loc.includes(alias)) return true;
+function getJobText(job) {
+  return `${job.title || ''} ${job.fullDescription || job.description || ''}`.toLowerCase();
+}
+
+function isJunkListing(job) {
+  const text = getJobText(job);
+  const link = (job.applyLink || '').toLowerCase();
+
+  if (link.includes('olx.in')) {
+    if (/\b(indigo|airline|airport|cabin crew|ground staff|air hostess|movie audition)\b/.test(text)) {
+      return true;
+    }
   }
 
   return false;
+}
+
+function matchesKeywords(job, keywords) {
+  const kw = (keywords || '').toLowerCase().trim();
+  if (!kw || kw === 'fresher') return true;
+
+  const text = getJobText(job);
+  const terms = kw.split(/[\s,+/]+/).filter(Boolean);
+  return terms.some(term => text.includes(term));
+}
+
+function sanitizeJobForClient(job) {
+  const full = job.fullDescription || job.description || '';
+  const { fullDescription, ...rest } = job;
+  return {
+    ...rest,
+    description: full.length > 400 ? full.substring(0, 400) + '...' : full
+  };
 }
 
 /**
@@ -699,7 +779,7 @@ function isLocationMatch(jobLocation, searchedCity) {
  *      "trainee", "intern", "junior", or no experience mentioned → KEEP.
  */
 function isFresherFriendly(job) {
-  const text = `${job.title || ''} ${job.description || ''}`.toLowerCase();
+  const text = getJobText(job);
 
   // ── REJECT patterns: explicit 2+ years requirement ──
   // Matches patterns like "2+ years", "3-5 years", "5 years", "minimum 2 years", etc.
@@ -765,23 +845,23 @@ function isFresherFriendly(job) {
 /**
  * Build a normalised job object from raw JSearch data
  */
-function mapJSearchJob(job, city) {
+function mapJSearchJob(job) {
+  const fullDescription = job.job_description || '';
+  const locationParts = [job.job_city, job.job_state, job.job_country].filter(Boolean);
   return {
     id: uuidv4(),
     title: job.job_title || 'N/A',
     company: job.employer_name || 'N/A',
-    location: job.job_city
-      ? `${job.job_city}, ${job.job_state || ''}`.replace(/, $/, '')
-      : city,
+    location: locationParts.length ? locationParts.join(', ') : null,
     type: job.job_employment_type || 'Full-time',
     posted: job.job_posted_at_datetime_utc || new Date().toISOString(),
-    description: (job.job_description || '').substring(0, 400) + '...',
+    fullDescription,
     applyLink: job.job_apply_link || '#',
     companyLogo: job.employer_logo || null,
     salary: job.job_min_salary
       ? `${job.job_salary_currency || '₹'}${job.job_min_salary} – ${job.job_max_salary || 'N/A'}`
       : 'Not disclosed',
-    email: extractEmailFromDescription(job.job_description || '') || null,
+    email: extractEmailFromDescription(fullDescription) || null,
     companyWebsite: job.employer_website || null,
     source: 'JSearch'
   };
@@ -813,12 +893,11 @@ async function jsearchQuery(query, page, numPages = '3') {
  * Fetch jobs from JSearch API using MULTIPLE keyword variations in parallel.
  * Optimised for fresher / 0–1 year experience roles.
  */
-async function fetchJSearchJobs(city, keywords, page) {
+async function fetchJSearchJobs(city, keywords) {
   if (!process.env.RAPIDAPI_KEY || process.env.RAPIDAPI_KEY === 'your-rapidapi-key-here') {
     return [];
   }
 
-  // Build varied search queries targeting 0–1 year / fresher roles
   const baseKeyword = keywords.trim();
   const queries = [
     `${baseKeyword} jobs in ${city}`,
@@ -826,70 +905,82 @@ async function fetchJSearchJobs(city, keywords, page) {
     `fresher software engineer jobs in ${city}`,
     `junior software engineer jobs in ${city}`,
     `entry level developer jobs in ${city}`,
-    `0-1 years experience developer ${city}`,
+    `graduate trainee software ${city}`,
     `software trainee jobs in ${city}`,
-    `graduate software engineer ${city}`,
     `fresher IT jobs in ${city}`,
     `intern developer jobs in ${city}`,
+    `0-1 years experience developer ${city}`,
+    `fresher jobs ${city} India`,
+    `campus hire software engineer ${city}`,
   ];
 
-  // Run all queries in parallel (fire-and-forget errors)
   const results = await Promise.allSettled(
-    queries.map(q => jsearchQuery(q, page))
+    queries.map(q => jsearchQuery(q, 1, '5'))
   );
 
   const allRaw = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
   console.log(`  JSearch raw hits: ${allRaw.length} across ${queries.length} queries`);
-  return allRaw.map(job => mapJSearchJob(job, city));
+  return allRaw.map(job => mapJSearchJob(job));
 }
 
 /**
  * Fetch jobs from Adzuna API (free, 250 calls/month on free tier)
  * Sign up at https://developer.adzuna.com
  */
-async function fetchAdzunaJobs(city, keywords, page) {
+async function fetchAdzunaJobs(city, keywords, _page) {
   const appId  = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
   if (!appId || appId === 'your-adzuna-app-id') {
     console.log('Adzuna: no credentials set, skipping.');
     return [];
   }
-  try {
-    const country = process.env.ADZUNA_COUNTRY || 'in';
-    const resp = await axios.get(
-      `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}`,
-      {
+
+  const country = process.env.ADZUNA_COUNTRY || 'in';
+  const pages = await Promise.allSettled(
+    [1, 2, 3].map(page =>
+      axios.get(`https://api.adzuna.com/v1/api/jobs/${country}/search/${page}`, {
         params: {
           app_id: appId,
           app_key: appKey,
-          what: `${keywords} fresher junior entry level trainee 0-1 years`,
+          what: `${keywords} fresher junior entry level trainee graduate intern`,
           where: city,
           results_per_page: 50,
           max_days_old: 30,
           content_type: 'application/json'
         },
         timeout: 12000
-      }
+      })
+    )
+  );
+
+  try {
+    const allResults = pages.flatMap(r =>
+      r.status === 'fulfilled' && r.value.data && r.value.data.results
+        ? r.value.data.results
+        : []
     );
-    if (!resp.data || !resp.data.results) return [];
-    console.log(`  Adzuna hits: ${resp.data.results.length}`);
-    return resp.data.results.map(job => ({
-      id: uuidv4(),
-      title: job.title || 'N/A',
-      company: (job.company && job.company.display_name) || 'N/A',
-      location: (job.location && job.location.display_name) || city,
-      type: job.contract_time === 'part_time' ? 'Part-time' : 'Full-time',
-      posted: job.created || new Date().toISOString(),
-      description: (job.description || '').substring(0, 400) + '...',
-      applyLink: job.redirect_url || '#',
-      companyLogo: null,
-      salary: job.salary_min
-        ? `₹${Math.round(job.salary_min)} – ₹${Math.round(job.salary_max || job.salary_min)}`
-        : 'Not disclosed',
-      email: null,
-      companyWebsite: null,
-      source: 'Adzuna'
-    }));
+    if (!allResults.length) return [];
+    console.log(`  Adzuna hits: ${allResults.length}`);
+    return allResults.map(job => {
+      const fullDescription = job.description || '';
+      return {
+        id: uuidv4(),
+        title: job.title || 'N/A',
+        company: (job.company && job.company.display_name) || 'N/A',
+        location: (job.location && job.location.display_name) || null,
+        type: job.contract_time === 'part_time' ? 'Part-time' : 'Full-time',
+        posted: job.created || new Date().toISOString(),
+        fullDescription,
+        applyLink: job.redirect_url || '#',
+        companyLogo: null,
+        salary: job.salary_min
+          ? `₹${Math.round(job.salary_min)} – ₹${Math.round(job.salary_max || job.salary_min)}`
+          : 'Not disclosed',
+        email: null,
+        companyWebsite: null,
+        source: 'Adzuna'
+      };
+    });
   } catch (err) {
     console.log('Adzuna error:', err.message);
     return [];
@@ -1036,5 +1127,6 @@ async function fetchArbeitnowJobs(keywords, page) {
 app.listen(PORT, () => {
   console.log(`\n🚀 Fresher Job Finder running at http://localhost:${PORT}`);
   console.log(`📧 SMTP: ${process.env.SMTP_USER === 'your-email@gmail.com' ? '❌ Not configured' : '✅ Configured'}`);
-  console.log(`🔑 RapidAPI: ${process.env.RAPIDAPI_KEY === 'your-rapidapi-key-here' ? '❌ Not configured (using demo data)' : '✅ Configured'}\n`);
+  console.log(`🔑 RapidAPI: ${process.env.RAPIDAPI_KEY === 'your-rapidapi-key-here' || !process.env.RAPIDAPI_KEY ? '❌ Not configured' : '✅ Configured'}`);
+  console.log(`🔑 Adzuna: ${!process.env.ADZUNA_APP_ID || process.env.ADZUNA_APP_ID === 'your-adzuna-app-id' ? '❌ Not configured' : '✅ Configured'}\n`);
 });

@@ -188,18 +188,22 @@
         updateStats();
         dom.resultsSection.style.display = 'block';
         dom.emptyState.style.display = 'none';
-        dom.loadMoreWrap.style.display = 'block';
+        dom.loadMoreWrap.style.display = data.hasMore ? 'block' : 'none';
         const totalAvail = data.totalAvailable || data.total;
         dom.resultsTitle.textContent = `Jobs in ${state.currentCity} - ${state.jobs.length} shown of ${totalAvail} found`;
-        dom.loadMoreBtn.textContent = `Load More (${totalAvail - state.jobs.length} remaining)`;
-        toast('success', `Found ${data.jobs.length} new job listings!`);
+        if (data.hasMore) {
+          dom.loadMoreBtn.textContent = `Load More (${totalAvail - state.jobs.length} remaining)`;
+        }
+        toast('success', `Found ${data.jobs.length} job listing${data.jobs.length !== 1 ? 's' : ''} in ${state.currentCity}!`);
       } else {
         if (!append) {
           dom.emptyState.style.display = 'block';
           dom.resultsSection.style.display = 'none';
         }
         dom.loadMoreWrap.style.display = 'none';
-        toast('info', 'No more new companies found. Try clearing history.');
+        toast('info', append
+          ? 'No more jobs to load.'
+          : `No fresher jobs found in ${state.currentCity}. Try a nearby metro or broader keywords like "fresher developer".`);
       }
     } catch (err) {
       toast('error', err.message);

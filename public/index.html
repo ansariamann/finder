@@ -169,7 +169,7 @@
         </div>
 
         <!-- Tag Input Row (email + position inline) -->
-        <div class="bulk-add-row">
+        <div class="bulk-add-row" id="tag-input-wrap">
           <div class="bulk-add-field email-field">
             <label for="tag-email-input">
               <i data-lucide="mail"></i>
@@ -305,6 +305,26 @@
           </div>
 
           <div class="template-form">
+            <div class="input-group">
+              <label for="sender-name-input">Your Name</label>
+              <input
+                type="text"
+                id="sender-name-input"
+                placeholder="Your full name"
+                autocomplete="name"
+              />
+            </div>
+
+            <div class="input-group">
+              <label for="sender-phone-input">Your Phone</label>
+              <input
+                type="tel"
+                id="sender-phone-input"
+                placeholder="+91-XXXXXXXXXX"
+                autocomplete="tel"
+              />
+            </div>
+
             <!-- Subject -->
             <div class="input-group">
               <label for="email-subject">Subject Line</label>
