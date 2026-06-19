@@ -503,10 +503,13 @@ app.post('/api/quick-send', async (req, res) => {
     // Build email subject
     const subject = `Application for ${position} Position – ${senderName}`;
 
+    // Derive greeting name from the email address
+    const hrName = deriveGreetingName(companyEmail);
+
     // Build HTML body (inline — no external template file needed server-side)
     const htmlBody = buildApplicationEmail({
       company:  companyName,
-      hrName:   'Hiring Manager',
+      hrName,
       position,
       name:     senderName,
       phone:    senderPhone,
@@ -649,6 +652,56 @@ app.get('/api/smtp-status', (req, res) => {
 });
 
 // ─── Helpers ─────────────────────────────────────────────────
+
+/**
+ * Derive a greeting name from the email address.
+ * - If the email contains "hr" or "career" → "Hiring Manager"
+ * - If the local part looks like a person's name (e.g. john.doe@) → "John Doe"
+ * - Otherwise (info@, contact@, jobs@, etc.) → "Sir/Madam"
+ */
+function deriveGreetingName(email) {
+  if (!email) return 'Sir/Madam';
+
+  const lower = email.toLowerCase();
+  const localPart = lower.split('@')[0] || '';
+
+  // Use "Hiring Manager" only for HR / career / recruitment emails
+  if (/\b(hr|career|careers|recruit|recruitment|hiring|talent)\b/.test(localPart)) {
+    return 'Hiring Manager';
+  }
+
+  // Generic / non-person local parts → neutral greeting
+  const genericPrefixes = new Set([
+    'info', 'contact', 'support', 'admin', 'hello', 'team',
+    'jobs', 'office', 'enquiry', 'enquiries', 'mail', 'general',
+    'sales', 'help', 'noreply', 'no-reply', 'webmaster', 'postmaster'
+  ]);
+  if (genericPrefixes.has(localPart)) {
+    return 'Sir/Madam';
+  }
+
+  // Try to extract a person name from the local part
+  // Patterns: john.doe, john_doe, john-doe, johndoe (if short enough)
+  const nameParts = localPart.split(/[._\-+]+/).filter(Boolean);
+  if (nameParts.length >= 2) {
+    // Likely a person name like "john.doe"
+    const formatted = nameParts
+      .slice(0, 2) // take first two parts (first + last name)
+      .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+      .join(' ');
+    // Sanity check: each part should be alphabetic and reasonable length
+    if (nameParts.slice(0, 2).every(p => /^[a-z]{2,}$/.test(p))) {
+      return formatted;
+    }
+  }
+
+  // Single-word local part that looks like a first name (3-12 alpha chars)
+  if (/^[a-z]{3,12}$/.test(localPart) && !genericPrefixes.has(localPart)) {
+    return localPart.charAt(0).toUpperCase() + localPart.slice(1).toLowerCase();
+  }
+
+  return 'Sir/Madam';
+}
 
 function extractEmailFromDescription(text) {
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;

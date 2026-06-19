@@ -831,11 +831,49 @@ Warm regards,
     }
   }
 
+  /** Derive greeting name from email (client-side mirror of server logic) */
+  function deriveGreetingName(email) {
+    if (!email) return 'Sir/Madam';
+    const lower = email.toLowerCase();
+    const localPart = lower.split('@')[0] || '';
+
+    // "Hiring Manager" only for HR / career / recruitment emails
+    if (/\b(hr|career|careers|recruit|recruitment|hiring|talent)\b/.test(localPart)) {
+      return 'Hiring Manager';
+    }
+
+    // Generic local parts → neutral greeting
+    const generic = new Set([
+      'info','contact','support','admin','hello','team',
+      'jobs','office','enquiry','enquiries','mail','general',
+      'sales','help','noreply','no-reply','webmaster','postmaster'
+    ]);
+    if (generic.has(localPart)) return 'Sir/Madam';
+
+    // Try to extract person name from local part (john.doe → John Doe)
+    const parts = localPart.split(/[._\-+]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const formatted = parts.slice(0, 2)
+        .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+        .join(' ');
+      if (parts.slice(0, 2).every(p => /^[a-z]{2,}$/.test(p))) return formatted;
+    }
+
+    // Single word that looks like a name
+    if (/^[a-z]{3,12}$/.test(localPart) && !generic.has(localPart)) {
+      return localPart.charAt(0).toUpperCase() + localPart.slice(1).toLowerCase();
+    }
+
+    return 'Sir/Madam';
+  }
+
   function fillTemplate(text, recipient) {
     const r = recipient || {};
+    // Use person's name if provided, otherwise derive from email
+    const greetingName = r.name || deriveGreetingName(r.email);
     return text
       .replace(/{company}/g,  r.company  || 'Your Company')
-      .replace(/{hr_name}/g,  r.name     || 'Hiring Manager')
+      .replace(/{hr_name}/g,  greetingName)
       .replace(/{position}/g, r.position || 'Software Developer')
       .replace(/{name}/g,     (dom.senderNameInput  && dom.senderNameInput.value)  || 'Your Name')
       .replace(/{phone}/g,    (dom.senderPhoneInput && dom.senderPhoneInput.value) || '+91-XXXXXXXXXX')
