@@ -336,7 +336,11 @@
 
     // Click on the wrapper → focus the input
     if (dom.tagInputWrap) {
-      dom.tagInputWrap.addEventListener('click', () => dom.tagEmailInput.focus());
+      dom.tagInputWrap.addEventListener('click', (e) => {
+        if (e.target === dom.tagInputWrap || e.target.closest('.email-field')) {
+          dom.tagEmailInput.focus();
+        }
+      });
     }
 
     // Helper to read inputs and add entry
