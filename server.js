@@ -3,28 +3,28 @@
  * Handles job search, email extraction, resume upload, and bulk emailing.
  */
 
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const nodemailer = require('nodemailer');
-const axios = require('axios');
-const cheerio = require('cheerio');
-const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const multer = require("multer");
+const nodemailer = require("nodemailer");
+const axios = require("axios");
+const cheerio = require("cheerio");
+const path = require("path");
+const fs = require("fs");
+const { v4: uuidv4 } = require("uuid");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ─── Middleware ───────────────────────────────────────────────
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
 // ─── File Upload Config ──────────────────────────────────────
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -32,53 +32,62 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `resume-${uuidv4()}${ext}`);
-  }
+  },
 });
 
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['.pdf', '.doc', '.docx'];
+    const allowedTypes = [".pdf", ".doc", ".docx"];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedTypes.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF, DOC, and DOCX files are allowed'));
+      cb(new Error("Only PDF, DOC, and DOCX files are allowed"));
     }
-  }
+  },
 });
 // ─── Persistent Store ────────────────────────────────────────
-const DATA_FILE = path.join(__dirname, 'data.json');
+const DATA_FILE = path.join(__dirname, "data.json");
 
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+      const raw = fs.readFileSync(DATA_FILE, "utf-8");
       return JSON.parse(raw);
     }
   } catch (e) {
-    console.log('Could not load data file, starting fresh:', e.message);
+    console.log("Could not load data file, starting fresh:", e.message);
   }
-  return { searchHistory: [], sentEmailsLog: [], uploadedResumePath: null, uploadedResumeOriginalName: null };
+  return {
+    searchHistory: [],
+    uploadedResumePath: null,
+    uploadedResumeOriginalName: null,
+  };
 }
 
 function saveData() {
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({
-      searchHistory,
-      sentEmailsLog,
-      uploadedResumePath,
-      uploadedResumeOriginalName
-    }, null, 2));
+    fs.writeFileSync(
+      DATA_FILE,
+      JSON.stringify(
+        {
+          searchHistory,
+          uploadedResumePath,
+          uploadedResumeOriginalName,
+        },
+        null,
+        2
+      )
+    );
   } catch (e) {
-    console.error('Failed to save data:', e.message);
+    console.error("Failed to save data:", e.message);
   }
 }
 
 const stored = loadData();
 let searchHistory = stored.searchHistory;
-let sentEmailsLog = stored.sentEmailsLog;
 let uploadedResumePath = stored.uploadedResumePath;
 let uploadedResumeOriginalName = stored.uploadedResumeOriginalName;
 
@@ -89,13 +98,13 @@ const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 // ─── SMTP Transporter ────────────────────────────────────────
 function createTransporter() {
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: parseInt(process.env.SMTP_PORT || "587"),
+    secure: process.env.SMTP_SECURE === "true",
     auth: {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
+      pass: process.env.SMTP_PASS,
+    },
   });
 }
 
@@ -105,77 +114,110 @@ function createTransporter() {
  * POST /api/search-jobs
  * Search for fresher jobs in a specific city using multiple real job APIs
  */
-app.post('/api/search-jobs', async (req, res) => {
+app.post("/api/search-jobs", async (req, res) => {
   try {
-    const { city, keywords = 'fresher', page = 1 } = req.body;
+    const { city, keywords = "fresher", page = 1 } = req.body;
 
     if (!city) {
-      return res.status(400).json({ error: 'City is required' });
+      return res.status(400).json({ error: "City is required" });
     }
 
-    const cacheKey = `${city.toLowerCase().trim()}|${keywords.toLowerCase().trim()}`;
+    const cacheKey = `${city.toLowerCase().trim()}|${keywords
+      .toLowerCase()
+      .trim()}`;
     const cached = searchResultCache.get(cacheKey);
     let uniqueJobs;
 
     if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL_MS) {
       uniqueJobs = cached.jobs;
-      console.log(`\n🔍 Cache hit: "${keywords}" in "${city}" (page ${page}, ${uniqueJobs.length} cached)`);
+      console.log(
+        `\n🔍 Cache hit: "${keywords}" in "${city}" (page ${page}, ${uniqueJobs.length} cached)`
+      );
     } else {
-      console.log(`\n🔍 Searching jobs: "${keywords}" in "${city}" (page ${page})`);
+      console.log(
+        `\n🔍 Searching jobs: "${keywords}" in "${city}" (page ${page})`
+      );
 
       // City searches rely on location-aware APIs; global boards add remote noise
       const [jsearchJobs, adzunaJobs] = await Promise.allSettled([
         fetchJSearchJobs(city, keywords),
-        fetchAdzunaJobs(city, keywords, 1)
+        fetchAdzunaJobs(city, keywords, 1),
       ]);
 
       let allJobs = [
-        ...(jsearchJobs.status === 'fulfilled' ? jsearchJobs.value : []),
-        ...(adzunaJobs.status  === 'fulfilled' ? adzunaJobs.value  : []),
+        ...(jsearchJobs.status === "fulfilled" ? jsearchJobs.value : []),
+        ...(adzunaJobs.status === "fulfilled" ? adzunaJobs.value : []),
       ];
 
       console.log(`📊 Total raw results: ${allJobs.length}`);
 
       const beforeJunk = allJobs.length;
-      allJobs = allJobs.filter(job => !isJunkListing(job));
+      allJobs = allJobs.filter((job) => !isJunkListing(job));
       if (beforeJunk !== allJobs.length) {
-        console.log(`🗑️  After junk filter: ${allJobs.length} (removed ${beforeJunk - allJobs.length} spam listings)`);
+        console.log(
+          `🗑️  After junk filter: ${allJobs.length} (removed ${
+            beforeJunk - allJobs.length
+          } spam listings)`
+        );
       }
 
       const beforeFilter = allJobs.length;
       allJobs = allJobs.filter(isFresherFriendly);
-      console.log(`🎯 After fresher filter: ${allJobs.length} (removed ${beforeFilter - allJobs.length} senior/experienced roles)`);
+      console.log(
+        `🎯 After fresher filter: ${allJobs.length} (removed ${
+          beforeFilter - allJobs.length
+        } senior/experienced roles)`
+      );
 
       const beforeKeyword = allJobs.length;
-      allJobs = allJobs.filter(job => matchesKeywords(job, keywords));
+      allJobs = allJobs.filter((job) => matchesKeywords(job, keywords));
       if (beforeKeyword !== allJobs.length) {
-        console.log(`🔎 After keyword filter: ${allJobs.length} (removed ${beforeKeyword - allJobs.length} unrelated roles)`);
+        console.log(
+          `🔎 After keyword filter: ${allJobs.length} (removed ${
+            beforeKeyword - allJobs.length
+          } unrelated roles)`
+        );
       }
 
       const beforeLocationFilter = allJobs.length;
-      allJobs = allJobs.filter(job => isLocationMatch(job.location, city));
-      console.log(`📍 After location filter: ${allJobs.length} (removed ${beforeLocationFilter - allJobs.length} jobs from other locations)`);
+      allJobs = allJobs.filter((job) => isLocationMatch(job.location, city));
+      console.log(
+        `📍 After location filter: ${allJobs.length} (removed ${
+          beforeLocationFilter - allJobs.length
+        } jobs from other locations)`
+      );
 
       const seenLinks = new Set();
-      const seenKeys  = new Set();
+      const seenKeys = new Set();
       uniqueJobs = [];
       for (const job of allJobs) {
-        const linkKey  = (job.applyLink || '').toLowerCase().trim();
+        const linkKey = (job.applyLink || "").toLowerCase().trim();
         const comboKey = `${job.company}|${job.title}`.toLowerCase().trim();
-        if (linkKey && linkKey !== '#' && seenLinks.has(linkKey)) continue;
+        if (linkKey && linkKey !== "#" && seenLinks.has(linkKey)) continue;
         if (seenKeys.has(comboKey)) continue;
-        if (linkKey && linkKey !== '#') seenLinks.add(linkKey);
+        if (linkKey && linkKey !== "#") seenLinks.add(linkKey);
         seenKeys.add(comboKey);
         uniqueJobs.push(sanitizeJobForClient(job));
       }
 
       uniqueJobs.sort((a, b) => new Date(b.posted) - new Date(a.posted));
-      searchResultCache.set(cacheKey, { jobs: uniqueJobs, timestamp: Date.now() });
+      searchResultCache.set(cacheKey, {
+        jobs: uniqueJobs,
+        timestamp: Date.now(),
+      });
 
       if (uniqueJobs.length === 0) {
-        const hasJSearch = process.env.RAPIDAPI_KEY && process.env.RAPIDAPI_KEY !== 'your-rapidapi-key-here';
-        const hasAdzuna  = process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_ID !== 'your-adzuna-app-id';
-        console.log(`⚠️  No jobs found. JSearch: ${hasJSearch ? 'OK' : 'missing key'}, Adzuna: ${hasAdzuna ? 'OK' : 'missing key'}`);
+        const hasJSearch =
+          process.env.RAPIDAPI_KEY &&
+          process.env.RAPIDAPI_KEY !== "your-rapidapi-key-here";
+        const hasAdzuna =
+          process.env.ADZUNA_APP_ID &&
+          process.env.ADZUNA_APP_ID !== "your-adzuna-app-id";
+        console.log(
+          `⚠️  No jobs found. JSearch: ${
+            hasJSearch ? "OK" : "missing key"
+          }, Adzuna: ${hasAdzuna ? "OK" : "missing key"}`
+        );
       }
     }
 
@@ -183,7 +225,9 @@ app.post('/api/search-jobs', async (req, res) => {
     const startIdx = (page - 1) * pageSize;
     const pageJobs = uniqueJobs.slice(startIdx, startIdx + pageSize);
 
-    console.log(`✅ Returning ${pageJobs.length} unique jobs (${uniqueJobs.length} total available)`);
+    console.log(
+      `✅ Returning ${pageJobs.length} unique jobs (${uniqueJobs.length} total available)`
+    );
 
     res.json({
       success: true,
@@ -191,12 +235,13 @@ app.post('/api/search-jobs', async (req, res) => {
       total: pageJobs.length,
       totalAvailable: uniqueJobs.length,
       jobs: pageJobs,
-      hasMore: startIdx + pageJobs.length < uniqueJobs.length
+      hasMore: startIdx + pageJobs.length < uniqueJobs.length,
     });
-
   } catch (error) {
-    console.error('Search error:', error);
-    res.status(500).json({ error: 'Failed to search jobs', details: error.message });
+    console.error("Search error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to search jobs", details: error.message });
   }
 });
 
@@ -204,12 +249,12 @@ app.post('/api/search-jobs', async (req, res) => {
  * POST /api/find-email
  * Attempt to find HR email for a company domain
  */
-app.post('/api/find-email', async (req, res) => {
+app.post("/api/find-email", async (req, res) => {
   try {
     const { company, domain } = req.body;
 
     if (!company) {
-      return res.status(400).json({ error: 'Company name is required' });
+      return res.status(400).json({ error: "Company name is required" });
     }
 
     let emails = [];
@@ -217,46 +262,81 @@ app.post('/api/find-email', async (req, res) => {
     // Try Hunter.io if API key is set
     if (process.env.HUNTER_API_KEY && domain) {
       try {
-        const hunterRes = await axios.get('https://api.hunter.io/v2/domain-search', {
-          params: {
-            domain: domain,
-            api_key: process.env.HUNTER_API_KEY,
-            department: 'human_resources',
-            limit: 5
-          },
-          timeout: 10000
-        });
+        const hunterRes = await axios.get(
+          "https://api.hunter.io/v2/domain-search",
+          {
+            params: {
+              domain: domain,
+              api_key: process.env.HUNTER_API_KEY,
+              department: "human_resources",
+              limit: 5,
+            },
+            timeout: 10000,
+          }
+        );
 
-        if (hunterRes.data && hunterRes.data.data && hunterRes.data.data.emails) {
-          emails = hunterRes.data.data.emails.map(e => ({
+        if (
+          hunterRes.data &&
+          hunterRes.data.data &&
+          hunterRes.data.data.emails
+        ) {
+          emails = hunterRes.data.data.emails.map((e) => ({
             email: e.value,
             confidence: e.confidence,
-            name: `${e.first_name || ''} ${e.last_name || ''}`.trim(),
-            position: e.position || 'HR'
+            name: `${e.first_name || ""} ${e.last_name || ""}`.trim(),
+            position: e.position || "HR",
           }));
         }
       } catch (hunterErr) {
-        console.log('Hunter.io error:', hunterErr.message);
+        console.log("Hunter.io error:", hunterErr.message);
       }
     }
 
     // Generate HR email patterns if no API results
     if (emails.length === 0 && domain) {
-      const cleanDomain = domain.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+      const cleanDomain = domain
+        .replace(/^(https?:\/\/)?(www\.)?/, "")
+        .split("/")[0];
       emails = [
-        { email: `hr@${cleanDomain}`, confidence: 70, name: 'HR Department', position: 'HR' },
-        { email: `careers@${cleanDomain}`, confidence: 65, name: 'Careers', position: 'Recruitment' },
-        { email: `recruitment@${cleanDomain}`, confidence: 60, name: 'Recruitment', position: 'Recruitment' },
-        { email: `jobs@${cleanDomain}`, confidence: 55, name: 'Jobs', position: 'HR' },
-        { email: `info@${cleanDomain}`, confidence: 40, name: 'General', position: 'General' }
+        {
+          email: `hr@${cleanDomain}`,
+          confidence: 70,
+          name: "HR Department",
+          position: "HR",
+        },
+        {
+          email: `careers@${cleanDomain}`,
+          confidence: 65,
+          name: "Careers",
+          position: "Recruitment",
+        },
+        {
+          email: `recruitment@${cleanDomain}`,
+          confidence: 60,
+          name: "Recruitment",
+          position: "Recruitment",
+        },
+        {
+          email: `jobs@${cleanDomain}`,
+          confidence: 55,
+          name: "Jobs",
+          position: "HR",
+        },
+        {
+          email: `info@${cleanDomain}`,
+          confidence: 40,
+          name: "General",
+          position: "General",
+        },
       ];
     }
 
     res.json({ success: true, company, emails });
-
   } catch (error) {
-    console.error('Email finder error:', error);
-    res.status(500).json({ error: 'Failed to find emails', details: error.message });
+    console.error("Email finder error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to find emails", details: error.message });
   }
 });
 
@@ -264,10 +344,10 @@ app.post('/api/find-email', async (req, res) => {
  * POST /api/upload-resume
  * Upload resume file
  */
-app.post('/api/upload-resume', upload.single('resume'), (req, res) => {
+app.post("/api/upload-resume", upload.single("resume"), (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
     // Remove old resume if exists
@@ -282,13 +362,14 @@ app.post('/api/upload-resume', upload.single('resume'), (req, res) => {
     res.json({
       success: true,
       filename: req.file.originalname,
-      size: (req.file.size / 1024).toFixed(1) + ' KB',
-      path: req.file.path
+      size: (req.file.size / 1024).toFixed(1) + " KB",
+      path: req.file.path,
     });
-
   } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'Failed to upload resume', details: error.message });
+    console.error("Upload error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to upload resume", details: error.message });
   }
 });
 
@@ -296,34 +377,50 @@ app.post('/api/upload-resume', upload.single('resume'), (req, res) => {
  * GET /api/resume-status
  * Check if a resume is uploaded
  */
-app.get('/api/resume-status', (req, res) => {
+app.get("/api/resume-status", (req, res) => {
   res.json({
     uploaded: !!uploadedResumePath && fs.existsSync(uploadedResumePath),
-    filename: uploadedResumeOriginalName || null
+    filename: uploadedResumeOriginalName || null,
   });
 });
+
+function markdownToHtml(text) {
+  if (!text) return "";
+  // Basic markdown-to-HTML for bold and newlines
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br>");
+}
 
 /**
  * POST /api/send-emails
  * Send bulk emails with resume attachment
  */
-app.post('/api/send-emails', async (req, res) => {
+app.post("/api/send-emails", async (req, res) => {
   try {
-    const { recipients, subject, htmlBody, senderName, senderPhone } = req.body;
+    const { recipients, subject, textBody, senderName, senderPhone } = req.body;
     console.log(`\n📨 Attempting to send ${recipients?.length || 0} emails...`);
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-      return res.status(400).json({ error: 'No recipients provided' });
+      return res.status(400).json({ error: "No recipients provided" });
     }
 
-    if (!subject || !htmlBody) {
-      return res.status(400).json({ error: 'Subject and email body are required' });
+    if (!subject || !textBody) {
+      return res
+        .status(400)
+        .json({ error: "Subject and email body are required" });
     }
 
-    if (!process.env.SMTP_USER || process.env.SMTP_USER === 'your-email@gmail.com') {
-      console.log('❌ Error: SMTP_USER is not configured in environment variables.');
+    if (
+      !process.env.SMTP_USER ||
+      process.env.SMTP_USER === "your-email@gmail.com"
+    ) {
+      console.log(
+        "❌ Error: SMTP_USER is not configured in environment variables."
+      );
       return res.status(400).json({
-        error: 'SMTP not configured. Please update .env file with your email credentials.'
+        error:
+          "SMTP not configured. Please update .env file with your email credentials.",
       });
     }
 
@@ -332,17 +429,17 @@ app.post('/api/send-emails', async (req, res) => {
     // Verify SMTP connection
     try {
       await transporter.verify();
-      console.log('✅ SMTP connection verified successfully.');
+      console.log("✅ SMTP connection verified successfully.");
     } catch (verifyErr) {
-      console.log('❌ SMTP Verification Failed:', verifyErr.message);
+      console.log("❌ SMTP Verification Failed:", verifyErr.message);
       return res.status(400).json({
-        error: 'SMTP connection failed. Check your email credentials in .env',
-        details: verifyErr.message
+        error: "SMTP connection failed. Check your email credentials in .env",
+        details: verifyErr.message,
       });
     }
 
-    const delay = parseInt(process.env.EMAIL_DELAY_MS || '3000');
-    const maxBatch = parseInt(process.env.MAX_EMAILS_PER_BATCH || '50');
+    const delay = parseInt(process.env.EMAIL_DELAY_MS || "3000");
+    const maxBatch = parseInt(process.env.MAX_EMAILS_PER_BATCH || "50");
     const batch = recipients.slice(0, maxBatch);
 
     const results = [];
@@ -352,25 +449,38 @@ app.post('/api/send-emails', async (req, res) => {
     for (let i = 0; i < batch.length; i++) {
       const recipient = batch[i];
 
+      // Fill placeholders and convert to HTML
+      const filledText = textBody
+        .replace(/{company}/g, recipient.company || "Your Company")
+        .replace(/{position}/g, recipient.position || "Fresher Position")
+        .replace(
+          /{name}/g,
+          senderName || process.env.SENDER_NAME || "Applicant"
+        )
+        .replace(/{phone}/g, senderPhone || process.env.SENDER_PHONE || "")
+        .replace(/{email}/g, process.env.SMTP_USER || "");
+
+      const htmlVersion = markdownToHtml(filledText);
+
       try {
         const mailOptions = {
-          from: `"${senderName || process.env.SENDER_NAME || 'Job Seeker'}" <${process.env.SMTP_USER}>`,
+          from: `"${senderName || process.env.SENDER_NAME || "Job Seeker"}" <${
+            process.env.SMTP_USER
+          }>`,
           to: recipient.email,
-          subject: subject.replace('{company}', recipient.company || 'Your Company'),
-          html: htmlBody
-            .replace(/{company}/g, recipient.company || 'Your Company')
-            .replace(/{position}/g, recipient.position || 'Fresher Position')
-            .replace(/{name}/g, senderName || process.env.SENDER_NAME || 'Applicant')
-            .replace(/{phone}/g, senderPhone || process.env.SENDER_PHONE || '')
-            .replace(/{email}/g, process.env.SMTP_USER || ''),
-          attachments: []
+          subject: subject.replace(
+            "{company}",
+            recipient.company || "Your Company"
+          ),
+          html: htmlVersion,
+          attachments: [],
         };
 
         // Attach resume if uploaded
         if (uploadedResumePath && fs.existsSync(uploadedResumePath)) {
           mailOptions.attachments.push({
-            filename: uploadedResumeOriginalName || 'Resume.pdf',
-            path: uploadedResumePath
+            filename: uploadedResumeOriginalName || "Resume.pdf",
+            path: uploadedResumePath,
           });
         }
 
@@ -379,32 +489,22 @@ app.post('/api/send-emails', async (req, res) => {
         results.push({
           email: recipient.email,
           company: recipient.company,
-          status: 'sent',
-          timestamp: new Date().toISOString()
+          status: "sent",
+          timestamp: new Date().toISOString(),
         });
-
-        sentEmailsLog.push({
-          email: recipient.email,
-          company: recipient.company,
-          subject,
-          sentAt: new Date().toISOString(),
-          status: 'sent'
-        });
-        saveData();
-
       } catch (sendErr) {
         failCount++;
         results.push({
           email: recipient.email,
           company: recipient.company,
-          status: 'failed',
-          error: sendErr.message
+          status: "failed",
+          error: sendErr.message,
         });
       }
 
       // Delay between emails to avoid rate limiting
       if (i < batch.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
@@ -413,12 +513,13 @@ app.post('/api/send-emails', async (req, res) => {
       total: batch.length,
       sent: successCount,
       failed: failCount,
-      results
+      results,
     });
-
   } catch (error) {
-    console.error('Email sending error:', error);
-    res.status(500).json({ error: 'Failed to send emails', details: error.message });
+    console.error("Email sending error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to send emails", details: error.message });
   }
 });
 
@@ -426,48 +527,42 @@ app.post('/api/send-emails', async (req, res) => {
  * POST /api/test-smtp
  * Test SMTP connection
  */
-app.post('/api/test-smtp', async (req, res) => {
+app.post("/api/test-smtp", async (req, res) => {
   try {
-    console.log('\n🔌 Testing SMTP connection...');
-    if (!process.env.SMTP_USER || process.env.SMTP_USER === 'your-email@gmail.com') {
-      console.log('❌ Error: SMTP not configured.');
+    console.log("\n🔌 Testing SMTP connection...");
+    if (
+      !process.env.SMTP_USER ||
+      process.env.SMTP_USER === "your-email@gmail.com"
+    ) {
+      console.log("❌ Error: SMTP not configured.");
       return res.status(400).json({
-        error: 'SMTP not configured. Update your .env file.'
+        error: "SMTP not configured. Update your .env file.",
       });
     }
 
     const transporter = createTransporter();
     await transporter.verify();
 
-    console.log('✅ SMTP test successful!');
-    res.json({ success: true, message: 'SMTP connection successful!' });
-
+    console.log("✅ SMTP test successful!");
+    res.json({ success: true, message: "SMTP connection successful!" });
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: 'SMTP connection failed',
-      details: error.message
+      error: "SMTP connection failed",
+      details: error.message,
     });
   }
-});
-
-/**
- * GET /api/email-log
- * Get sent emails history
- */
-app.get('/api/email-log', (req, res) => {
-  res.json({ success: true, log: sentEmailsLog });
 });
 
 /**
  * GET /api/sender-info
  * Return sender name and phone from environment variables
  */
-app.get('/api/sender-info', (req, res) => {
+app.get("/api/sender-info", (req, res) => {
   res.json({
-    name:  process.env.SENDER_NAME  || '',
-    phone: process.env.SENDER_PHONE || '',
-    email: process.env.SMTP_USER    || ''
+    name: process.env.SENDER_NAME || "",
+    phone: process.env.SENDER_PHONE || "",
+    email: process.env.SMTP_USER || "",
   });
 });
 
@@ -477,62 +572,104 @@ app.get('/api/sender-info', (req, res) => {
  * build the HTML body, and fire the email — fully automatic.
  * Body: { companyEmail: string }
  */
-app.post('/api/quick-send', async (req, res) => {
+app.post("/api/quick-send", async (req, res) => {
   try {
-    const { companyEmail, position: requestedPosition } = req.body;
-    if (!companyEmail || !companyEmail.includes('@')) {
-      return res.status(400).json({ error: 'A valid company email is required.' });
+    const {
+      companyEmail,
+      position: requestedPosition,
+      subject: subjectTemplate,
+      textBody: bodyTemplate,
+      companyName: providedCompanyName,
+    } = req.body;
+    if (!companyEmail || !companyEmail.includes("@")) {
+      return res
+        .status(400)
+        .json({ error: "A valid company email is required." });
     }
 
-    // Derive company name from domain
-    const domain = companyEmail.split('@')[1] || '';
-    const skipParts = new Set(['com','co','in','org','net','io','ai','app','dev','tech','gov','edu','uk','us','au']);
-    const parts = domain.split('.');
-    const namePart = parts.find(p => !skipParts.has(p.toLowerCase())) || parts[0];
-    const companyName = namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
-
-    const position    = (requestedPosition && requestedPosition.trim()) || 'Software Developer';
-    const senderName  = process.env.SENDER_NAME  || 'Applicant';
-    const senderPhone = process.env.SENDER_PHONE  || '';
-    const senderEmail = process.env.SMTP_USER     || '';
-
-    if (!senderEmail || senderEmail === 'your-email@gmail.com') {
-      return res.status(400).json({ error: 'SMTP not configured. Please update .env file.' });
+    // Use provided company name, or derive it from domain as a fallback
+    let companyName = providedCompanyName;
+    if (!companyName) {
+      const domain = companyEmail.split("@")[1] || "";
+      const skipParts = new Set([
+        "com",
+        "co",
+        "in",
+        "org",
+        "net",
+        "io",
+        "ai",
+        "app",
+        "dev",
+        "tech",
+        "gov",
+        "edu",
+        "uk",
+        "us",
+        "au",
+      ]);
+      const parts = domain.split(".");
+      const namePart =
+        parts.find((p) => !skipParts.has(p.toLowerCase())) || parts[0];
+      companyName =
+        namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
     }
 
-    // Build email subject
-    const subject = `Application for ${position} Position – ${senderName}`;
+    const position =
+      (requestedPosition && requestedPosition.trim()) || "Software Developer";
+    const senderName = process.env.SENDER_NAME || "Applicant";
+    const senderPhone = process.env.SENDER_PHONE || "";
+    const senderEmail = process.env.SMTP_USER || "";
+
+    if (!senderEmail || senderEmail === "your-email@gmail.com") {
+      return res
+        .status(400)
+        .json({ error: "SMTP not configured. Please update .env file." });
+    }
 
     // Derive greeting name from the email address
     const hrName = deriveGreetingName(companyEmail);
 
-    // Build HTML body (inline — no external template file needed server-side)
-    const htmlBody = buildApplicationEmail({
-      company:  companyName,
-      hrName,
-      position,
-      name:     senderName,
-      phone:    senderPhone,
-      email:    senderEmail
-    });
+    // Fill placeholders in subject and body templates from client
+    const subject = (
+      subjectTemplate || `Application for {position} Position – {name}`
+    )
+      .replace(/{company}/g, companyName)
+      .replace(/{position}/g, position)
+      .replace(/{name}/g, senderName);
+
+    const filledTextBody = (
+      bodyTemplate || "Please find my resume attached for the {position} role."
+    )
+      .replace(/{company}/g, companyName)
+      .replace(/{hr_name}/g, hrName)
+      .replace(/{position}/g, position)
+      .replace(/{name}/g, senderName)
+      .replace(/{phone}/g, senderPhone)
+      .replace(/{email}/g, senderEmail);
+    const htmlVersion = markdownToHtml(filledTextBody);
 
     const transporter = createTransporter();
-    try { await transporter.verify(); } catch (ve) {
-      return res.status(400).json({ error: 'SMTP connection failed.', details: ve.message });
+    try {
+      await transporter.verify();
+    } catch (ve) {
+      return res
+        .status(400)
+        .json({ error: "SMTP connection failed.", details: ve.message });
     }
 
     const mailOptions = {
       from: `"${senderName}" <${senderEmail}>`,
-      to:   companyEmail,
+      to: companyEmail,
       subject,
-      html: htmlBody,
-      attachments: []
+      html: htmlVersion,
+      attachments: [],
     };
 
     if (uploadedResumePath && fs.existsSync(uploadedResumePath)) {
       mailOptions.attachments.push({
-        filename: uploadedResumeOriginalName || 'Resume.pdf',
-        path:     uploadedResumePath
+        filename: uploadedResumeOriginalName || "Resume.pdf",
+        path: uploadedResumePath,
       });
     }
 
@@ -548,106 +685,60 @@ app.post('/api/quick-send', async (req, res) => {
         break; // success
       } catch (sendErr) {
         lastErr = sendErr;
-        const isTransient = /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKET|too many|rate/i.test(sendErr.message);
+        const isTransient =
+          /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKET|too many|rate/i.test(
+            sendErr.message
+          );
         if (isTransient && attempt < SERVER_MAX_RETRIES) {
-          console.log(`  ⟳ Transient SMTP error for ${companyEmail}, retrying (${attempt + 1}/${SERVER_MAX_RETRIES})...`);
-          await new Promise(r => setTimeout(r, SERVER_RETRY_DELAYS[attempt] || 6000));
+          console.log(
+            `  ⟳ Transient SMTP error for ${companyEmail}, retrying (${
+              attempt + 1
+            }/${SERVER_MAX_RETRIES})...`
+          );
+          await new Promise((r) =>
+            setTimeout(r, SERVER_RETRY_DELAYS[attempt] || 6000)
+          );
           continue;
         }
         throw sendErr; // non-transient or retries exhausted
       }
     }
 
-    sentEmailsLog.push({
-      email:   companyEmail,
-      company: companyName,
-      subject,
-      sentAt:  new Date().toISOString(),
-      status:  'sent'
-    });
-    saveData();
-
     console.log(`✅ Quick-sent to ${companyEmail} (${companyName})`);
     res.json({ success: true, company: companyName, email: companyEmail });
-
   } catch (error) {
-    console.error('Quick-send error:', error);
-    res.status(500).json({ error: 'Failed to send email', details: error.message });
+    console.error("Quick-send error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to send email", details: error.message });
   }
 });
-
-/**
- * Build a professional HTML application email (server-side mirror of the client template)
- */
-function buildApplicationEmail({ company, hrName, position, name, phone, email }) {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Job Application</title>
-<style>
-  body { margin: 0; padding: 0; background: #f5f5f5; font-family: 'Segoe UI', Arial, sans-serif; }
-  .wrap { max-width: 580px; margin: 32px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-  .body { padding: 36px 40px; color: #222222; font-size: 15px; line-height: 1.75; }
-  .body p { margin: 0 0 16px; }
-  .body a { color: #4f46e5; text-decoration: none; }
-  .divider { border: none; border-top: 1px solid #e5e5e5; margin: 28px 0; }
-  .sig-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
-  .sig-line { font-size: 13px; color: #666666; margin: 2px 0; }
-  .footer { background: #f9f9f9; padding: 16px 40px; border-top: 1px solid #e5e5e5; font-size: 11px; color: #aaaaaa; text-align: center; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="body">
-    <p>Dear ${hrName},</p>
-
-    <p>I hope you are doing well. I am writing to express my interest in the <strong>${position}</strong> role at <strong>${company}</strong>. I came across your company and was genuinely impressed by your work — I would love the opportunity to contribute as a fresher.</p>
-
-    <p>I am a recent Computer Science graduate with a solid foundation in programming, data structures, and web development. I am a quick learner, a team player, and I am eager to grow with a company that values innovation and quality.</p>
-
-    <p>I have attached my resume for your review. I would be happy to connect for a quick call at your convenience.</p>
-
-    <p>Thank you for your time and consideration. I look forward to hearing from you.</p>
-
-    <hr class="divider"/>
-
-    <div class="sig-name">${name}</div>
-    <div class="sig-line">&#9993; ${email}</div>
-    ${phone ? `<div class="sig-line">&#128222; ${phone}</div>` : ''}
-  </div>
-  <div class="footer">This email was sent as a job application enquiry. If received in error, please disregard.</div>
-</div>
-</body>
-</html>`;
-}
-
 
 /**
  * POST /api/clear-history
  * Clear search history to allow re-fetching companies
  */
-app.post('/api/clear-history', (req, res) => {
+app.post("/api/clear-history", (req, res) => {
   searchHistory = [];
   searchResultCache.clear();
   saveData();
-  res.json({ success: true, message: 'Search history cleared' });
+  res.json({ success: true, message: "Search history cleared" });
 });
 
 /**
  * GET /api/smtp-status
  * Check if SMTP is configured
  */
-app.get('/api/smtp-status', (req, res) => {
-  const configured = process.env.SMTP_USER &&
-    process.env.SMTP_USER !== 'your-email@gmail.com' &&
+app.get("/api/smtp-status", (req, res) => {
+  const configured =
+    process.env.SMTP_USER &&
+    process.env.SMTP_USER !== "your-email@gmail.com" &&
     process.env.SMTP_PASS &&
-    process.env.SMTP_PASS !== 'your-app-password';
+    process.env.SMTP_PASS !== "your-app-password";
 
   res.json({
     configured: !!configured,
-    email: configured ? process.env.SMTP_USER : null
+    email: configured ? process.env.SMTP_USER : null,
   });
 });
 
@@ -660,24 +751,41 @@ app.get('/api/smtp-status', (req, res) => {
  * - Otherwise (info@, contact@, jobs@, etc.) → "Sir/Madam"
  */
 function deriveGreetingName(email) {
-  if (!email) return 'Sir/Madam';
+  if (!email) return "Sir/Madam";
 
   const lower = email.toLowerCase();
-  const localPart = lower.split('@')[0] || '';
+  const localPart = lower.split("@")[0] || "";
 
   // Use "Hiring Manager" only for HR / career / recruitment emails
-  if (/\b(hr|career|careers|recruit|recruitment|hiring|talent)\b/.test(localPart)) {
-    return 'Hiring Manager';
+  if (
+    /\b(hr|career|careers|recruit|recruitment|hiring|talent)\b/.test(localPart)
+  ) {
+    return "Hiring Manager";
   }
 
   // Generic / non-person local parts → neutral greeting
   const genericPrefixes = new Set([
-    'info', 'contact', 'support', 'admin', 'hello', 'team',
-    'jobs', 'office', 'enquiry', 'enquiries', 'mail', 'general',
-    'sales', 'help', 'noreply', 'no-reply', 'webmaster', 'postmaster'
+    "info",
+    "contact",
+    "support",
+    "admin",
+    "hello",
+    "team",
+    "jobs",
+    "office",
+    "enquiry",
+    "enquiries",
+    "mail",
+    "general",
+    "sales",
+    "help",
+    "noreply",
+    "no-reply",
+    "webmaster",
+    "postmaster",
   ]);
   if (genericPrefixes.has(localPart)) {
-    return 'Sir/Madam';
+    return "Sir/Madam";
   }
 
   // Try to extract a person name from the local part
@@ -687,10 +795,10 @@ function deriveGreetingName(email) {
     // Likely a person name like "john.doe"
     const formatted = nameParts
       .slice(0, 2) // take first two parts (first + last name)
-      .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
-      .join(' ');
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+      .join(" ");
     // Sanity check: each part should be alphabetic and reasonable length
-    if (nameParts.slice(0, 2).every(p => /^[a-z]{2,}$/.test(p))) {
+    if (nameParts.slice(0, 2).every((p) => /^[a-z]{2,}$/.test(p))) {
       return formatted;
     }
   }
@@ -700,14 +808,16 @@ function deriveGreetingName(email) {
     return localPart.charAt(0).toUpperCase() + localPart.slice(1).toLowerCase();
   }
 
-  return 'Sir/Madam';
+  return "Sir/Madam";
 }
 
 function extractEmailFromDescription(text) {
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
   const matches = text.match(emailRegex);
   if (matches && matches.length > 0) {
-    const hrEmail = matches.find(e => /hr|recruit|career|job|talent|hiring/i.test(e));
+    const hrEmail = matches.find((e) =>
+      /hr|recruit|career|job|talent|hiring/i.test(e)
+    );
     return hrEmail || matches[0];
   }
   return null;
@@ -721,12 +831,12 @@ function isLocationMatch(jobLocation, searchedCity) {
   if (!searchedCity) return true;
   if (!jobLocation) return false;
 
-  const loc  = jobLocation.toLowerCase().trim();
+  const loc = jobLocation.toLowerCase().trim();
   const city = searchedCity.toLowerCase().trim();
 
   const cityAliases = getCityAliases();
   const aliases = cityAliases[city] || [city];
-  const matchesCity = aliases.some(alias => loc.includes(alias));
+  const matchesCity = aliases.some((alias) => loc.includes(alias));
 
   if (matchesCity) return true;
 
@@ -736,7 +846,11 @@ function isLocationMatch(jobLocation, searchedCity) {
   }
 
   // Reject broad / foreign locations that aren't the searched city
-  if (/\b(worldwide|anywhere|global|usa|united states|uk|europe|canada|australia)\b/.test(loc)) {
+  if (
+    /\b(worldwide|anywhere|global|usa|united states|uk|europe|canada|australia)\b/.test(
+      loc
+    )
+  ) {
     return false;
   }
 
@@ -750,55 +864,88 @@ function isLocationMatch(jobLocation, searchedCity) {
 
 function getCityAliases() {
   return {
-    'bangalore':  ['bengaluru', 'blr', 'bangalore'],
-    'bengaluru':  ['bangalore', 'blr', 'bengaluru'],
-    'mumbai':     ['bombay', 'mumbai'],
-    'bombay':     ['mumbai', 'bombay'],
-    'chennai':    ['madras', 'chennai'],
-    'madras':     ['chennai', 'madras'],
-    'kolkata':    ['calcutta', 'kolkata'],
-    'calcutta':   ['kolkata', 'calcutta'],
-    'delhi':      ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad'],
-    'new delhi':  ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram'],
-    'ncr':        ['new delhi', 'ncr', 'delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad'],
-    'noida':      ['ncr', 'delhi', 'noida', 'greater noida'],
-    'gurgaon':    ['gurugram', 'gurgaon', 'ncr', 'delhi'],
-    'gurugram':   ['gurgaon', 'gurugram', 'ncr', 'delhi'],
-    'hyderabad':  ['hyderabad', 'hyd', 'secunderabad'],
-    'secunderabad': ['hyderabad', 'secunderabad'],
-    'pune':       ['pune', 'puna', 'hinjewadi', 'hinjewadi phase', 'kharadi', 'viman nagar', 'wakad', 'baner'],
-    'ahmedabad':  ['ahmedabad', 'amdavad'],
-    'indore':     ['indore'],
-    'lucknow':    ['lucknow'],
-    'nagpur':     ['nagpur'],
-    'jaipur':     ['jaipur'],
-    'chandigarh': ['chandigarh', 'mohali', 'panchkula'],
-    'coimbatore': ['coimbatore'],
-    'kochi':      ['cochin', 'kochi', 'ernakulam'],
-    'cochin':     ['kochi', 'cochin', 'ernakulam'],
-    'thiruvananthapuram': ['trivandrum', 'thiruvananthapuram'],
-    'trivandrum': ['thiruvananthapuram', 'trivandrum'],
-    'vizag':      ['visakhapatnam', 'vizag'],
-    'visakhapatnam': ['vizag', 'visakhapatnam'],
-    'bhopal':     ['bhopal'],
-    'surat':      ['surat'],
-    'vadodara':   ['vadodara', 'baroda'],
-    'baroda':     ['vadodara', 'baroda'],
-    'mysore':     ['mysore', 'mysuru'],
-    'mysuru':     ['mysore', 'mysuru'],
+    bangalore: ["bengaluru", "blr", "bangalore"],
+    bengaluru: ["bangalore", "blr", "bengaluru"],
+    mumbai: ["bombay", "mumbai"],
+    bombay: ["mumbai", "bombay"],
+    chennai: ["madras", "chennai"],
+    madras: ["chennai", "madras"],
+    kolkata: ["calcutta", "kolkata"],
+    calcutta: ["kolkata", "calcutta"],
+    delhi: [
+      "new delhi",
+      "ncr",
+      "delhi",
+      "noida",
+      "gurgaon",
+      "gurugram",
+      "faridabad",
+      "ghaziabad",
+    ],
+    "new delhi": ["new delhi", "ncr", "delhi", "noida", "gurgaon", "gurugram"],
+    ncr: [
+      "new delhi",
+      "ncr",
+      "delhi",
+      "noida",
+      "gurgaon",
+      "gurugram",
+      "faridabad",
+      "ghaziabad",
+    ],
+    noida: ["ncr", "delhi", "noida", "greater noida"],
+    gurgaon: ["gurugram", "gurgaon", "ncr", "delhi"],
+    gurugram: ["gurgaon", "gurugram", "ncr", "delhi"],
+    hyderabad: ["hyderabad", "hyd", "secunderabad"],
+    secunderabad: ["hyderabad", "secunderabad"],
+    pune: [
+      "pune",
+      "puna",
+      "hinjewadi",
+      "hinjewadi phase",
+      "kharadi",
+      "viman nagar",
+      "wakad",
+      "baner",
+    ],
+    ahmedabad: ["ahmedabad", "amdavad"],
+    indore: ["indore"],
+    lucknow: ["lucknow"],
+    nagpur: ["nagpur"],
+    jaipur: ["jaipur"],
+    chandigarh: ["chandigarh", "mohali", "panchkula"],
+    coimbatore: ["coimbatore"],
+    kochi: ["cochin", "kochi", "ernakulam"],
+    cochin: ["kochi", "cochin", "ernakulam"],
+    thiruvananthapuram: ["trivandrum", "thiruvananthapuram"],
+    trivandrum: ["thiruvananthapuram", "trivandrum"],
+    vizag: ["visakhapatnam", "vizag"],
+    visakhapatnam: ["vizag", "visakhapatnam"],
+    bhopal: ["bhopal"],
+    surat: ["surat"],
+    vadodara: ["vadodara", "baroda"],
+    baroda: ["vadodara", "baroda"],
+    mysore: ["mysore", "mysuru"],
+    mysuru: ["mysore", "mysuru"],
   };
 }
 
 function getJobText(job) {
-  return `${job.title || ''} ${job.fullDescription || job.description || ''}`.toLowerCase();
+  return `${job.title || ""} ${
+    job.fullDescription || job.description || ""
+  }`.toLowerCase();
 }
 
 function isJunkListing(job) {
   const text = getJobText(job);
-  const link = (job.applyLink || '').toLowerCase();
+  const link = (job.applyLink || "").toLowerCase();
 
-  if (link.includes('olx.in')) {
-    if (/\b(indigo|airline|airport|cabin crew|ground staff|air hostess|movie audition)\b/.test(text)) {
+  if (link.includes("olx.in")) {
+    if (
+      /\b(indigo|airline|airport|cabin crew|ground staff|air hostess|movie audition)\b/.test(
+        text
+      )
+    ) {
       return true;
     }
   }
@@ -807,20 +954,20 @@ function isJunkListing(job) {
 }
 
 function matchesKeywords(job, keywords) {
-  const kw = (keywords || '').toLowerCase().trim();
-  if (!kw || kw === 'fresher') return true;
+  const kw = (keywords || "").toLowerCase().trim();
+  if (!kw || kw === "fresher") return true;
 
   const text = getJobText(job);
   const terms = kw.split(/[\s,+/]+/).filter(Boolean);
-  return terms.some(term => text.includes(term));
+  return terms.some((term) => text.includes(term));
 }
 
 function sanitizeJobForClient(job) {
-  const full = job.fullDescription || job.description || '';
+  const full = job.fullDescription || job.description || "";
   const { fullDescription, ...rest } = job;
   return {
     ...rest,
-    description: full.length > 400 ? full.substring(0, 400) + '...' : full
+    description: full.length > 400 ? full.substring(0, 400) + "..." : full,
   };
 }
 
@@ -837,25 +984,29 @@ function isFresherFriendly(job) {
   // ── REJECT patterns: explicit 2+ years requirement ──
   // Matches patterns like "2+ years", "3-5 years", "5 years", "minimum 2 years", etc.
   const rejectPatterns = [
-    /\b([2-9]|[1-9]\d)\+?\s*(?:to|-|–)?\s*\d*\s*(?:years?|yrs?)\b/,           // "2+ years", "3-5 years", "5 years"
+    /\b([2-9]|[1-9]\d)\+?\s*(?:to|-|–)?\s*\d*\s*(?:years?|yrs?)\b/, // "2+ years", "3-5 years", "5 years"
     /\b(?:minimum|min|at\s*least)\s*(?:of\s+)?([2-9]|[1-9]\d)\s*(?:years?|yrs?)\b/, // "minimum 2 years"
-    /\bexperience\s*(?:of\s+)?([2-9]|[1-9]\d)\s*(?:years?|yrs?)\b/,            // "experience of 3 years"
-    /\b([2-9]|[1-9]\d)\s*(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp)\b/,    // "3 years of experience"
-    /\bsenior\b/,                                                               // "Senior" roles
-    /\blead\b/,                                                                 // "Lead" roles
-    /\bstaff\b/,                                                                // "Staff" roles
-    /\bprincipal\b/,                                                            // "Principal" roles
-    /\barchitect\b/,                                                            // "Architect" roles
-    /\bdirector\b/,                                                             // "Director" roles
-    /\bmanager\b.*\bengineering\b/,                                             // "Engineering Manager"
-    /\bvp\b/,                                                                   // VP roles
+    /\bexperience\s*(?:of\s+)?([2-9]|[1-9]\d)\s*(?:years?|yrs?)\b/, // "experience of 3 years"
+    /\b([2-9]|[1-9]\d)\s*(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp)\b/, // "3 years of experience"
+    /\bsenior\b/, // "Senior" roles
+    /\blead\b/, // "Lead" roles
+    /\bstaff\b/, // "Staff" roles
+    /\bprincipal\b/, // "Principal" roles
+    /\barchitect\b/, // "Architect" roles
+    /\bdirector\b/, // "Director" roles
+    /\bmanager\b.*\bengineering\b/, // "Engineering Manager"
+    /\bvp\b/, // VP roles
   ];
 
   for (const pat of rejectPatterns) {
     if (pat.test(text)) {
       // Exception: if job title itself says "fresher" or "entry" or "junior", keep it
-      const title = (job.title || '').toLowerCase();
-      if (/fresher|entry.?level|junior|trainee|intern|graduate|apprentice/i.test(title)) {
+      const title = (job.title || "").toLowerCase();
+      if (
+        /fresher|entry.?level|junior|trainee|intern|graduate|apprentice/i.test(
+          title
+        )
+      ) {
         return true;
       }
       return false;
@@ -871,9 +1022,9 @@ function isFresherFriendly(job) {
     /\bintern\b/,
     /\bgraduate\b/,
     /\bapprentice\b/,
-    /\b0\s*(?:to|-|–)\s*1\s*(?:years?|yrs?)\b/,   // "0-1 years"
-    /\b0\s*(?:to|-|–)\s*2\s*(?:years?|yrs?)\b/,   // "0-2 years" (still fresher-friendly)
-    /\b1\s*(?:to|-|–)\s*2\s*(?:years?|yrs?)\b/,   // "1-2 years" (still ok for freshers)
+    /\b0\s*(?:to|-|–)\s*1\s*(?:years?|yrs?)\b/, // "0-1 years"
+    /\b0\s*(?:to|-|–)\s*2\s*(?:years?|yrs?)\b/, // "0-2 years" (still fresher-friendly)
+    /\b1\s*(?:to|-|–)\s*2\s*(?:years?|yrs?)\b/, // "1-2 years" (still ok for freshers)
     /\bno\s+(?:prior\s+)?experience\s+(?:required|needed|necessary)\b/,
     /\b(?:0|zero|nil)\s*(?:years?|yrs?)\s*(?:experience|exp)\b/,
     /\b1\s*(?:years?|yrs?)\s*(?:experience|exp)\b/, // "1 year experience"
@@ -899,47 +1050,51 @@ function isFresherFriendly(job) {
  * Build a normalised job object from raw JSearch data
  */
 function mapJSearchJob(job) {
-  const fullDescription = job.job_description || '';
-  const locationParts = [job.job_city, job.job_state, job.job_country].filter(Boolean);
+  const fullDescription = job.job_description || "";
+  const locationParts = [job.job_city, job.job_state, job.job_country].filter(
+    Boolean
+  );
   return {
     id: uuidv4(),
-    title: job.job_title || 'N/A',
-    company: job.employer_name || 'N/A',
-    location: locationParts.length ? locationParts.join(', ') : null,
-    type: job.job_employment_type || 'Full-time',
+    title: job.job_title || "N/A",
+    company: job.employer_name || "N/A",
+    location: locationParts.length ? locationParts.join(", ") : null,
+    type: job.job_employment_type || "Full-time",
     posted: job.job_posted_at_datetime_utc || new Date().toISOString(),
     fullDescription,
-    applyLink: job.job_apply_link || '#',
+    applyLink: job.job_apply_link || "#",
     companyLogo: job.employer_logo || null,
     salary: job.job_min_salary
-      ? `${job.job_salary_currency || '₹'}${job.job_min_salary} – ${job.job_max_salary || 'N/A'}`
-      : 'Not disclosed',
+      ? `${job.job_salary_currency || "₹"}${job.job_min_salary} – ${
+          job.job_max_salary || "N/A"
+        }`
+      : "Not disclosed",
     email: extractEmailFromDescription(fullDescription) || null,
     companyWebsite: job.employer_website || null,
-    source: 'JSearch'
+    source: "JSearch",
   };
 }
 
 /**
  * Single JSearch query helper
  */
-async function jsearchQuery(query, page, numPages = '3') {
-  const response = await axios.get('https://jsearch.p.rapidapi.com/search', {
+async function jsearchQuery(query, page, numPages = "3") {
+  const response = await axios.get("https://jsearch.p.rapidapi.com/search", {
     params: {
       query,
       page: String(page),
       num_pages: numPages,
-      date_posted: 'month',
-      employment_types: 'FULLTIME,PARTTIME,INTERN,CONTRACTOR',
-      job_requirements: 'no_experience,under_3_years_experience,no_degree',
+      date_posted: "month",
+      employment_types: "FULLTIME,PARTTIME,INTERN,CONTRACTOR",
+      job_requirements: "no_experience,under_3_years_experience,no_degree",
     },
     headers: {
-      'x-rapidapi-key': process.env.RAPIDAPI_KEY,
-      'x-rapidapi-host': 'jsearch.p.rapidapi.com'
+      "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+      "x-rapidapi-host": "jsearch.p.rapidapi.com",
     },
-    timeout: 20000
+    timeout: 20000,
   });
-  return (response.data && response.data.data) ? response.data.data : [];
+  return response.data && response.data.data ? response.data.data : [];
 }
 
 /**
@@ -947,7 +1102,10 @@ async function jsearchQuery(query, page, numPages = '3') {
  * Optimised for fresher / 0–1 year experience roles.
  */
 async function fetchJSearchJobs(city, keywords) {
-  if (!process.env.RAPIDAPI_KEY || process.env.RAPIDAPI_KEY === 'your-rapidapi-key-here') {
+  if (
+    !process.env.RAPIDAPI_KEY ||
+    process.env.RAPIDAPI_KEY === "your-rapidapi-key-here"
+  ) {
     return [];
   }
 
@@ -968,12 +1126,16 @@ async function fetchJSearchJobs(city, keywords) {
   ];
 
   const results = await Promise.allSettled(
-    queries.map(q => jsearchQuery(q, 1, '5'))
+    queries.map((q) => jsearchQuery(q, 1, "5"))
   );
 
-  const allRaw = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-  console.log(`  JSearch raw hits: ${allRaw.length} across ${queries.length} queries`);
-  return allRaw.map(job => mapJSearchJob(job));
+  const allRaw = results.flatMap((r) =>
+    r.status === "fulfilled" ? r.value : []
+  );
+  console.log(
+    `  JSearch raw hits: ${allRaw.length} across ${queries.length} queries`
+  );
+  return allRaw.map((job) => mapJSearchJob(job));
 }
 
 /**
@@ -981,61 +1143,66 @@ async function fetchJSearchJobs(city, keywords) {
  * Sign up at https://developer.adzuna.com
  */
 async function fetchAdzunaJobs(city, keywords, _page) {
-  const appId  = process.env.ADZUNA_APP_ID;
+  const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
-  if (!appId || appId === 'your-adzuna-app-id') {
-    console.log('Adzuna: no credentials set, skipping.');
+  if (!appId || appId === "your-adzuna-app-id") {
+    console.log("Adzuna: no credentials set, skipping.");
     return [];
   }
 
-  const country = process.env.ADZUNA_COUNTRY || 'in';
+  const country = process.env.ADZUNA_COUNTRY || "in";
   const pages = await Promise.allSettled(
-    [1, 2, 3].map(page =>
-      axios.get(`https://api.adzuna.com/v1/api/jobs/${country}/search/${page}`, {
-        params: {
-          app_id: appId,
-          app_key: appKey,
-          what: `${keywords} fresher junior entry level trainee graduate intern`,
-          where: city,
-          results_per_page: 50,
-          max_days_old: 30,
-          content_type: 'application/json'
-        },
-        timeout: 12000
-      })
+    [1, 2, 3].map((page) =>
+      axios.get(
+        `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}`,
+        {
+          params: {
+            app_id: appId,
+            app_key: appKey,
+            what: `${keywords} fresher junior entry level trainee graduate intern`,
+            where: city,
+            results_per_page: 50,
+            max_days_old: 30,
+            content_type: "application/json",
+          },
+          timeout: 12000,
+        }
+      )
     )
   );
 
   try {
-    const allResults = pages.flatMap(r =>
-      r.status === 'fulfilled' && r.value.data && r.value.data.results
+    const allResults = pages.flatMap((r) =>
+      r.status === "fulfilled" && r.value.data && r.value.data.results
         ? r.value.data.results
         : []
     );
     if (!allResults.length) return [];
     console.log(`  Adzuna hits: ${allResults.length}`);
-    return allResults.map(job => {
-      const fullDescription = job.description || '';
+    return allResults.map((job) => {
+      const fullDescription = job.description || "";
       return {
         id: uuidv4(),
-        title: job.title || 'N/A',
-        company: (job.company && job.company.display_name) || 'N/A',
+        title: job.title || "N/A",
+        company: (job.company && job.company.display_name) || "N/A",
         location: (job.location && job.location.display_name) || null,
-        type: job.contract_time === 'part_time' ? 'Part-time' : 'Full-time',
+        type: job.contract_time === "part_time" ? "Part-time" : "Full-time",
         posted: job.created || new Date().toISOString(),
         fullDescription,
-        applyLink: job.redirect_url || '#',
+        applyLink: job.redirect_url || "#",
         companyLogo: null,
         salary: job.salary_min
-          ? `₹${Math.round(job.salary_min)} – ₹${Math.round(job.salary_max || job.salary_min)}`
-          : 'Not disclosed',
+          ? `₹${Math.round(job.salary_min)} – ₹${Math.round(
+              job.salary_max || job.salary_min
+            )}`
+          : "Not disclosed",
         email: null,
         companyWebsite: null,
-        source: 'Adzuna'
+        source: "Adzuna",
       };
     });
   } catch (err) {
-    console.log('Adzuna error:', err.message);
+    console.log("Adzuna error:", err.message);
     return [];
   }
 }
@@ -1048,22 +1215,22 @@ async function fetchRemotiveJobs(keywords) {
   try {
     const searches = [
       `${keywords}`,
-      'software developer',
-      'software engineer',
-      'web developer',
-      'backend developer',
-      'frontend developer',
+      "software developer",
+      "software engineer",
+      "web developer",
+      "backend developer",
+      "frontend developer",
     ];
     const results = await Promise.allSettled(
-      searches.map(s =>
-        axios.get('https://remotive.com/api/remote-jobs', {
+      searches.map((s) =>
+        axios.get("https://remotive.com/api/remote-jobs", {
           params: { search: s, limit: 50 },
-          timeout: 10000
+          timeout: 10000,
         })
       )
     );
-    const allJobs = results.flatMap(r =>
-      r.status === 'fulfilled' && r.value.data && r.value.data.jobs
+    const allJobs = results.flatMap((r) =>
+      r.status === "fulfilled" && r.value.data && r.value.data.jobs
         ? r.value.data.jobs
         : []
     );
@@ -1071,24 +1238,27 @@ async function fetchRemotiveJobs(keywords) {
     // Keep jobs from last 30 days
     const thirtyDaysAgo = Date.now() - 30 * 24 * 3600 * 1000;
     return allJobs
-      .filter(job => new Date(job.publication_date).getTime() > thirtyDaysAgo)
-      .map(job => ({
+      .filter((job) => new Date(job.publication_date).getTime() > thirtyDaysAgo)
+      .map((job) => ({
         id: uuidv4(),
-        title: job.title || 'N/A',
-        company: job.company_name || 'N/A',
-        location: job.candidate_required_location || 'Remote',
-        type: job.job_type === 'full_time' ? 'Full-time' : (job.job_type || 'Remote'),
+        title: job.title || "N/A",
+        company: job.company_name || "N/A",
+        location: job.candidate_required_location || "Remote",
+        type:
+          job.job_type === "full_time" ? "Full-time" : job.job_type || "Remote",
         posted: job.publication_date || new Date().toISOString(),
-        description: (job.description || '').replace(/<[^>]+>/g, '').substring(0, 400) + '...',
-        applyLink: job.url || '#',
+        description:
+          (job.description || "").replace(/<[^>]+>/g, "").substring(0, 400) +
+          "...",
+        applyLink: job.url || "#",
         companyLogo: job.company_logo || null,
-        salary: job.salary || 'Not disclosed',
+        salary: job.salary || "Not disclosed",
         email: null,
         companyWebsite: null,
-        source: 'Remotive'
+        source: "Remotive",
       }));
   } catch (err) {
-    console.log('Remotive error:', err.message);
+    console.log("Remotive error:", err.message);
     return [];
   }
 }
@@ -1100,36 +1270,41 @@ async function fetchRemotiveJobs(keywords) {
  */
 async function fetchTheMuseJobs(keywords, page) {
   try {
-    const resp = await axios.get('https://www.themuse.com/api/public/jobs', {
+    const resp = await axios.get("https://www.themuse.com/api/public/jobs", {
       params: {
-        category: 'Software Engineer',
-        level: 'Entry Level',
-        page: page - 1,   // Muse is 0-indexed
-        descended: true
+        category: "Software Engineer",
+        level: "Entry Level",
+        page: page - 1, // Muse is 0-indexed
+        descended: true,
       },
-      timeout: 10000
+      timeout: 10000,
     });
     if (!resp.data || !resp.data.results) return [];
     console.log(`  The Muse hits: ${resp.data.results.length}`);
-    return resp.data.results.map(job => ({
+    return resp.data.results.map((job) => ({
       id: uuidv4(),
-      title: (job.name || 'N/A'),
-      company: (job.company && job.company.name) || 'N/A',
-      location: (job.locations && job.locations[0] && job.locations[0].name) || 'Remote',
-      type: (job.type) || 'Full-time',
+      title: job.name || "N/A",
+      company: (job.company && job.company.name) || "N/A",
+      location:
+        (job.locations && job.locations[0] && job.locations[0].name) ||
+        "Remote",
+      type: job.type || "Full-time",
       posted: job.publication_date || new Date().toISOString(),
-      description: (job.contents || '').replace(/<[^>]+>/g, '').substring(0, 400) + '...',
-      applyLink: job.refs && job.refs.landing_page ? job.refs.landing_page : '#',
-      companyLogo: job.company && job.company.refs && job.company.refs.logo_image
-        ? job.company.refs.logo_image
-        : null,
-      salary: 'Not disclosed',
+      description:
+        (job.contents || "").replace(/<[^>]+>/g, "").substring(0, 400) + "...",
+      applyLink:
+        job.refs && job.refs.landing_page ? job.refs.landing_page : "#",
+      companyLogo:
+        job.company && job.company.refs && job.company.refs.logo_image
+          ? job.company.refs.logo_image
+          : null,
+      salary: "Not disclosed",
       email: null,
       companyWebsite: null,
-      source: 'The Muse'
+      source: "The Muse",
     }));
   } catch (err) {
-    console.log('The Muse error:', err.message);
+    console.log("The Muse error:", err.message);
     return [];
   }
 }
@@ -1140,38 +1315,46 @@ async function fetchTheMuseJobs(keywords, page) {
  */
 async function fetchArbeitnowJobs(keywords, page) {
   try {
-    const resp = await axios.get('https://arbeitnow.com/api/job-board-api', {
+    const resp = await axios.get("https://arbeitnow.com/api/job-board-api", {
       params: { page },
-      timeout: 10000
+      timeout: 10000,
     });
     if (!resp.data || !resp.data.data) return [];
     const kw = keywords.toLowerCase();
     // Filter to tech/software related
-    const filtered = resp.data.data.filter(job => {
-      const text = `${job.title} ${job.tags ? job.tags.join(' ') : ''}`.toLowerCase();
-      return text.includes('software') || text.includes('developer') ||
-             text.includes('engineer') || text.includes(kw);
+    const filtered = resp.data.data.filter((job) => {
+      const text = `${job.title} ${
+        job.tags ? job.tags.join(" ") : ""
+      }`.toLowerCase();
+      return (
+        text.includes("software") ||
+        text.includes("developer") ||
+        text.includes("engineer") ||
+        text.includes(kw)
+      );
     });
     console.log(`  Arbeitnow hits: ${filtered.length}`);
-    return filtered.map(job => ({
+    return filtered.map((job) => ({
       id: uuidv4(),
-      title: job.title || 'N/A',
-      company: job.company_name || 'N/A',
-      location: job.location || 'Remote',
-      type: job.remote ? 'Remote' : 'Full-time',
+      title: job.title || "N/A",
+      company: job.company_name || "N/A",
+      location: job.location || "Remote",
+      type: job.remote ? "Remote" : "Full-time",
       posted: job.created_at
         ? new Date(job.created_at * 1000).toISOString()
         : new Date().toISOString(),
-      description: (job.description || '').replace(/<[^>]+>/g, '').substring(0, 400) + '...',
-      applyLink: job.url || '#',
+      description:
+        (job.description || "").replace(/<[^>]+>/g, "").substring(0, 400) +
+        "...",
+      applyLink: job.url || "#",
       companyLogo: null,
-      salary: 'Not disclosed',
+      salary: "Not disclosed",
       email: null,
       companyWebsite: null,
-      source: 'Arbeitnow'
+      source: "Arbeitnow",
     }));
   } catch (err) {
-    console.log('Arbeitnow error:', err.message);
+    console.log("Arbeitnow error:", err.message);
     return [];
   }
 }
@@ -1179,7 +1362,27 @@ async function fetchArbeitnowJobs(keywords, page) {
 // ─── Start Server ────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 Fresher Job Finder running at http://localhost:${PORT}`);
-  console.log(`📧 SMTP: ${process.env.SMTP_USER === 'your-email@gmail.com' ? '❌ Not configured' : '✅ Configured'}`);
-  console.log(`🔑 RapidAPI: ${process.env.RAPIDAPI_KEY === 'your-rapidapi-key-here' || !process.env.RAPIDAPI_KEY ? '❌ Not configured' : '✅ Configured'}`);
-  console.log(`🔑 Adzuna: ${!process.env.ADZUNA_APP_ID || process.env.ADZUNA_APP_ID === 'your-adzuna-app-id' ? '❌ Not configured' : '✅ Configured'}\n`);
+  console.log(
+    `📧 SMTP: ${
+      process.env.SMTP_USER === "your-email@gmail.com"
+        ? "❌ Not configured"
+        : "✅ Configured"
+    }`
+  );
+  console.log(
+    `🔑 RapidAPI: ${
+      process.env.RAPIDAPI_KEY === "your-rapidapi-key-here" ||
+      !process.env.RAPIDAPI_KEY
+        ? "❌ Not configured"
+        : "✅ Configured"
+    }`
+  );
+  console.log(
+    `🔑 Adzuna: ${
+      !process.env.ADZUNA_APP_ID ||
+      process.env.ADZUNA_APP_ID === "your-adzuna-app-id"
+        ? "❌ Not configured"
+        : "✅ Configured"
+    }\n`
+  );
 });
