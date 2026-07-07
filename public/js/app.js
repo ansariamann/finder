@@ -418,20 +418,28 @@
       });
     }
 
-    // Also handle paste — split by comma/newline/semicolon and add all
+    // Handle paste — if multiple emails (comma/semicolon/newline separated),
+    // add them all as chips. If it's a single email, let it land in the input
+    // so the user can edit it before pressing Enter / clicking Add.
     dom.tagEmailInput.addEventListener("paste", (e) => {
-      e.preventDefault();
       const pasted = (e.clipboardData || window.clipboardData).getData("text");
-      const posVal =
-        (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) ||
-        "Software Developer";
-      const companyVal =
-        (dom.bulkCompanyInput && dom.bulkCompanyInput.value.trim()) || "";
-      const parts = pasted.split(/[,;\n\r]+/);
-      parts.forEach((p) => {
-        const t = p.trim();
-        if (t) addChip(t, posVal, companyVal);
-      });
+      const parts = pasted
+        .split(/[,;\n\r]+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      // Only bulk-add when there are multiple parts (i.e. the paste clearly
+      // contains several emails separated by delimiters).
+      if (parts.length > 1) {
+        e.preventDefault();
+        const posVal =
+          (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) ||
+          "Software Developer";
+        const companyVal =
+          (dom.bulkCompanyInput && dom.bulkCompanyInput.value.trim()) || "";
+        parts.forEach((t) => addChip(t, posVal, companyVal));
+      }
+      // Otherwise let the browser paste naturally so the user can edit the text.
     });
 
     // Send All button
