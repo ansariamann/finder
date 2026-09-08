@@ -16,6 +16,8 @@
     emailTemplate: window.DEFAULT_EMAIL_TEMPLATE || "",
     resumeUploaded: false,
     resumeName: "",
+    driveLinkSaved: false,
+    driveLink: "",
     senderName: "",
     senderPhone: "",
     senderEmail: "",
@@ -69,6 +71,10 @@
     resumeNameEl: $("#resume-name"),
     resumeSizeEl: $("#resume-size"),
     removeResumeBtn: $("#remove-resume-btn"),
+    // Drive link
+    driveLinkInput: $("#drive-link-input"),
+    saveDriveLinkBtn: $("#save-drive-link-btn"),
+    driveLinkStatus: $("#drive-link-status"),
     // Template (right panel - kept for advanced users)
     emailSubject: $("#email-subject"),
     templateBody: $("#template-body"),
@@ -97,6 +103,7 @@
     setupJobSelection();
     setupBulkSend();
     setupResumeUpload();
+    setupDriveLink();
     setupEmailTemplate();
     setupSettings();
     setupModal();
@@ -830,9 +837,48 @@
         dom.uploadArea.style.display = "none";
         dom.uploadSuccess.style.display = "flex";
       }
+      if (data.driveLink) {
+        state.driveLinkSaved = true;
+        state.driveLink = data.driveLink;
+        if (dom.driveLinkInput) dom.driveLinkInput.value = data.driveLink;
+        if (dom.driveLinkStatus) {
+          dom.driveLinkStatus.textContent = "✅ Drive link saved";
+          dom.driveLinkStatus.style.color = "var(--success, #22c55e)";
+        }
+      }
     } catch (e) {
       /* silent */
     }
+  }
+
+  // --- Google Drive Resume Link ---
+  function setupDriveLink() {
+    if (!dom.saveDriveLinkBtn) return;
+    dom.saveDriveLinkBtn.addEventListener("click", async () => {
+      const link = (dom.driveLinkInput?.value || "").trim();
+      if (!link || !link.startsWith("http")) {
+        toast("error", "Please enter a valid Google Drive URL.");
+        return;
+      }
+      try {
+        const res = await fetch("/api/set-drive-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ driveLink: link }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        state.driveLinkSaved = true;
+        state.driveLink = link;
+        if (dom.driveLinkStatus) {
+          dom.driveLinkStatus.textContent = "✅ Drive link saved — will appear in emails";
+          dom.driveLinkStatus.style.color = "var(--success, #22c55e)";
+        }
+        toast("success", "Resume Drive link saved!");
+      } catch (err) {
+        toast("error", "Failed to save link: " + err.message);
+      }
+    });
   }
 
   // --- Email Template (right panel — advanced use) ---
@@ -846,7 +892,7 @@ As a recent Computer Science graduate, I am proficient in backend technologies l
 
 I am actively looking for fresher/junior opportunities as a Java Backend Developer, Software Engineer, or Junior ML Engineer. I am particularly interested in roles that allow me to work on scalable systems and AI-powered applications.
 
-I have attached my resume for your reference and would be grateful to discuss how I can contribute to your team.
+I have attached my resume for your reference and would be grateful to discuss how I can contribute to your team. Please find my resume link below.
 
 Thank you for your time.
 

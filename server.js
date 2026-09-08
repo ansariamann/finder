@@ -64,6 +64,7 @@ function loadData() {
     searchHistory: [],
     uploadedResumePath: null,
     uploadedResumeOriginalName: null,
+    resumeDriveLink: null,
   };
 }
 
@@ -76,6 +77,7 @@ function saveData() {
           searchHistory,
           uploadedResumePath,
           uploadedResumeOriginalName,
+          resumeDriveLink,
         },
         null,
         2
@@ -90,6 +92,7 @@ const stored = loadData();
 let searchHistory = stored.searchHistory;
 let uploadedResumePath = stored.uploadedResumePath;
 let uploadedResumeOriginalName = stored.uploadedResumeOriginalName;
+let resumeDriveLink = stored.resumeDriveLink || null;
 
 // Cache full search results so pagination returns consistent pages
 const searchResultCache = new Map();
@@ -381,7 +384,33 @@ app.get("/api/resume-status", (req, res) => {
   res.json({
     uploaded: !!uploadedResumePath && fs.existsSync(uploadedResumePath),
     filename: uploadedResumeOriginalName || null,
+    driveLink: resumeDriveLink || null,
   });
+});
+
+/**
+ * POST /api/set-drive-link
+ * Save a Google Drive resume link (used instead of attaching PDF)
+ */
+app.post("/api/set-drive-link", (req, res) => {
+  const { driveLink } = req.body;
+  if (!driveLink || !driveLink.startsWith("http")) {
+    return res.status(400).json({ error: "A valid URL is required." });
+  }
+  resumeDriveLink = driveLink.trim();
+  saveData();
+  console.log("📎 Resume Drive link saved:", resumeDriveLink);
+  res.json({ success: true, driveLink: resumeDriveLink });
+});
+
+/**
+ * DELETE /api/set-drive-link
+ * Remove the saved Google Drive resume link
+ */
+app.delete("/api/set-drive-link", (req, res) => {
+  resumeDriveLink = null;
+  saveData();
+  res.json({ success: true });
 });
 
 /**
@@ -394,9 +423,10 @@ function markdownToPlain(text) {
 
 /**
  * Convert markdown to a full, well-formed HTML email document.
+ * Optionally embeds a Google Drive resume link at the bottom.
  * Gmail requires a complete HTML document — bare <br> fragments trigger 552.
  */
-function markdownToHtml(text) {
+function markdownToHtml(text, driveLink) {
   if (!text) return "";
   const body = text
     .replace(/&/g, "&amp;")
@@ -404,6 +434,9 @@ function markdownToHtml(text) {
     .replace(/>/g, "&gt;")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br>");
+  const resumeSection = driveLink
+    ? `<br><br><p style="margin:0;">📎 <strong>Resume:</strong> <a href="${driveLink}" style="color:#1a73e8;">View My Resume (Google Drive)</a></p>`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -415,7 +448,7 @@ function markdownToHtml(text) {
     <tr><td align="center" style="padding:20px 0;">
       <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
         <tr><td style="padding:32px 24px;">
-          ${body}
+          ${body}${resumeSection}
         </td></tr>
       </table>
     </td></tr>
@@ -492,7 +525,9 @@ app.post("/api/send-emails", async (req, res) => {
         .replace(/{phone}/g, senderPhone || process.env.SENDER_PHONE || "")
         .replace(/{email}/g, process.env.SMTP_USER || "");
 
-      const htmlVersion = markdownToHtml(filledText);
+      const htmlVersion = markdownToHtml(filledText, resumeDriveLink);
+      const plainText = markdownToPlain(filledText) +
+        (resumeDriveLink ? `\n\nResume: ${resumeDriveLink}` : "");
 
       try {
         const mailOptions = {
@@ -504,23 +539,16 @@ app.post("/api/send-emails", async (req, res) => {
             "{company}",
             recipient.company || "Your Company"
           ),
-          text: markdownToPlain(filledText),  // plain-text fallback (required by Gmail)
+          text: plainText,
           html: htmlVersion,
           headers: {
             "X-Mailer": "Nodemailer",
             "X-Priority": "3",
             "Importance": "Normal",
           },
-          attachments: [],
+          // No attachment — Gmail blocks PDFs from AWS IPs (552 error)
+          // Resume link is embedded in email body via Google Drive instead
         };
-
-        // Attach resume if uploaded
-        if (uploadedResumePath && fs.existsSync(uploadedResumePath)) {
-          mailOptions.attachments.push({
-            filename: uploadedResumeOriginalName || "Resume.pdf",
-            path: uploadedResumePath,
-          });
-        }
 
         await transporter.sendMail(mailOptions);
         successCount++;
@@ -685,7 +713,7 @@ app.post("/api/quick-send", async (req, res) => {
       .replace(/{name}/g, senderName)
       .replace(/{phone}/g, senderPhone)
       .replace(/{email}/g, senderEmail);
-    const htmlVersion = markdownToHtml(filledTextBody);
+    const htmlVersion = markdownToHtml(filledTextBody, resumeDriveLink);
 
     const transporter = createTransporter();
     try {
@@ -696,26 +724,24 @@ app.post("/api/quick-send", async (req, res) => {
         .json({ error: "SMTP connection failed.", details: ve.message });
     }
 
+    // Build plain-text version — append Drive link if available
+    const plainTextBody = markdownToPlain(filledTextBody) +
+      (resumeDriveLink ? `\n\nResume: ${resumeDriveLink}` : "");
+
     const mailOptions = {
       from: `"${senderName}" <${senderEmail}>`,
       to: companyEmail,
       subject,
-      text: markdownToPlain(filledTextBody),  // plain-text fallback (required by Gmail)
+      text: plainTextBody,
       html: htmlVersion,
       headers: {
         "X-Mailer": "Nodemailer",
         "X-Priority": "3",
         "Importance": "Normal",
       },
-      attachments: [],
+      // No attachment — Gmail blocks PDFs from AWS IPs (552 error)
+      // Resume link is embedded in the email body instead
     };
-
-    if (uploadedResumePath && fs.existsSync(uploadedResumePath)) {
-      mailOptions.attachments.push({
-        filename: uploadedResumeOriginalName || "Resume.pdf",
-        path: uploadedResumePath,
-      });
-    }
 
     // Retry logic for transient SMTP errors
     const SERVER_MAX_RETRIES = 2;
