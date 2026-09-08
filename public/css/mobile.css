@@ -16,10 +16,10 @@ body { padding-bottom: calc(var(--bottom-nav) + var(--safe-bottom)); }
   bottom: 0; left: 0; right: 0;
   z-index: 200;
   height: var(--bottom-nav);
-  background: rgba(6,6,11,0.95);
-  backdrop-filter: blur(24px) saturate(1.5);
-  -webkit-backdrop-filter: blur(24px) saturate(1.5);
-  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(40px) saturate(2);
+  -webkit-backdrop-filter: blur(40px) saturate(2);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: var(--safe-bottom);
 }
 .bottom-nav-btn {

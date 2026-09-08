@@ -384,12 +384,44 @@ app.get("/api/resume-status", (req, res) => {
   });
 });
 
+/**
+ * Strip markdown and return clean plain text (for the text/plain part).
+ */
+function markdownToPlain(text) {
+  if (!text) return "";
+  return text.replace(/\*\*(.*?)\*\*/g, "$1");
+}
+
+/**
+ * Convert markdown to a full, well-formed HTML email document.
+ * Gmail requires a complete HTML document — bare <br> fragments trigger 552.
+ */
 function markdownToHtml(text) {
   if (!text) return "";
-  // Basic markdown-to-HTML for bold and newlines
-  return text
+  const body = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br>");
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#1a1a1a;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr><td align="center" style="padding:20px 0;">
+      <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
+        <tr><td style="padding:32px 24px;">
+          ${body}
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 }
 
 /**
@@ -472,7 +504,13 @@ app.post("/api/send-emails", async (req, res) => {
             "{company}",
             recipient.company || "Your Company"
           ),
+          text: markdownToPlain(filledText),  // plain-text fallback (required by Gmail)
           html: htmlVersion,
+          headers: {
+            "X-Mailer": "Nodemailer",
+            "X-Priority": "3",
+            "Importance": "Normal",
+          },
           attachments: [],
         };
 
@@ -662,7 +700,13 @@ app.post("/api/quick-send", async (req, res) => {
       from: `"${senderName}" <${senderEmail}>`,
       to: companyEmail,
       subject,
+      text: markdownToPlain(filledTextBody),  // plain-text fallback (required by Gmail)
       html: htmlVersion,
+      headers: {
+        "X-Mailer": "Nodemailer",
+        "X-Priority": "3",
+        "Importance": "Normal",
+      },
       attachments: [],
     };
 

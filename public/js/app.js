@@ -361,15 +361,31 @@
       });
     }
 
-    // Helper to read inputs and add entry
+    // Helper to read inputs and add entry (supports comma-separated emails)
     function addCurrentEntry() {
       const emailVal = dom.tagEmailInput.value.trim();
       const posVal =
-        (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) || "";
+        (dom.bulkPositionInput && dom.bulkPositionInput.value.trim()) || "Software Developer";
       const companyVal =
         (dom.bulkCompanyInput && dom.bulkCompanyInput.value.trim()) || "";
-      if (emailVal) {
-        addChip(emailVal, posVal || "Software Developer", companyVal);
+
+      if (!emailVal) return;
+
+      // Split by comma or semicolon so multiple addresses can be entered at once
+      const parts = emailVal
+        .split(/[,;]+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      if (parts.length > 1) {
+        // Bulk-add each address as its own chip without clearing position/company
+        parts.forEach((addr) => addChipNoReset(addr, posVal, companyVal));
+        dom.tagEmailInput.value = "";
+        dom.tagEmailInput.focus();
+        renderChips();
+        updateBulkMeta();
+      } else {
+        addChip(emailVal, posVal, companyVal);
       }
     }
 
@@ -486,6 +502,24 @@
     dom.tagEmailInput.focus();
     renderChips();
     updateBulkMeta();
+  }
+
+  // Like addChip but does NOT clear position/company inputs or re-render —
+  // caller is responsible for calling renderChips() + updateBulkMeta() once.
+  function addChipNoReset(email, position, company) {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanPos = (position || "Software Developer").trim();
+    const cleanCompany = (company || "").trim();
+
+    if (!isValidEmail(cleanEmail)) {
+      toast("error", `"${email}" doesn't look like a valid email.`);
+      return;
+    }
+    if (bulkEntries.some((e) => e.email === cleanEmail)) {
+      toast("info", `${email} is already in the list.`);
+      return;
+    }
+    bulkEntries.push({ email: cleanEmail, position: cleanPos, company: cleanCompany });
   }
 
   function removeChip(email) {
