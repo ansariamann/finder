@@ -546,9 +546,16 @@ app.post("/api/send-emails", async (req, res) => {
             "X-Priority": "3",
             "Importance": "Normal",
           },
-          // No attachment — Gmail blocks PDFs from AWS IPs (552 error)
-          // Resume link is embedded in email body via Google Drive instead
         };
+
+        if (uploadedResumePath && fs.existsSync(uploadedResumePath)) {
+          mailOptions.attachments = [
+            {
+              filename: uploadedResumeOriginalName || path.basename(uploadedResumePath),
+              path: uploadedResumePath,
+            },
+          ];
+        }
 
         await transporter.sendMail(mailOptions);
         successCount++;
@@ -739,9 +746,16 @@ app.post("/api/quick-send", async (req, res) => {
         "X-Priority": "3",
         "Importance": "Normal",
       },
-      // No attachment — Gmail blocks PDFs from AWS IPs (552 error)
-      // Resume link is embedded in the email body instead
     };
+
+    if (uploadedResumePath && fs.existsSync(uploadedResumePath)) {
+      mailOptions.attachments = [
+        {
+          filename: uploadedResumeOriginalName || path.basename(uploadedResumePath),
+          path: uploadedResumePath,
+        },
+      ];
+    }
 
     // Retry logic for transient SMTP errors
     const SERVER_MAX_RETRIES = 2;

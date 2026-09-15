@@ -886,7 +886,7 @@
     window.DEFAULT_EMAIL_TEMPLATE ||
     `Dear {hr_name},
 
-I hope you're doing well. I am writing to express my interest in opportunities at **{company}**.
+I hope you're doing well. I am writing to express my interest in the **{position}** position at **{company}**.
 
 As a recent Computer Science graduate, I am proficient in backend technologies like **Java, Spring Boot, and Microservices**, along with **Python, Machine Learning (Scikit-learn, PyTorch), and Generative AI**.
 
